@@ -1,0 +1,115 @@
+import { ChatMessage } from '../../types';
+import { MCPClientService } from '../mcpClient';
+
+/**
+ * Base interface for all AI service providers
+ * Implement this interface to add support for new AI providers
+ */
+export interface IAIService {
+  /**
+   * Send a chat message and get AI response with tool execution
+   * @param messages - Conversation history
+   * @param userMessage - Current user message
+   * @returns AI response text
+   */
+  chat(messages: ChatMessage[], userMessage: string): Promise<string>;
+
+  /**
+   * Get the name of the AI provider
+   */
+  getProviderName(): string;
+
+  /**
+   * Get the current model being used
+   */
+  getModelName(): string;
+}
+
+/**
+ * Abstract base class for AI services
+ * Provides common functionality for all AI providers
+ */
+export abstract class BaseAIService implements IAIService {
+  protected mcpClient: MCPClientService;
+
+  constructor(mcpClient: MCPClientService) {
+    this.mcpClient = mcpClient;
+  }
+
+  abstract chat(messages: ChatMessage[], userMessage: string): Promise<string>;
+  abstract getProviderName(): string;
+  abstract getModelName(): string;
+
+  /**
+   * Get tools from MCP server in a common format
+   * Child classes can override this to customize tool format
+   */
+  protected async getMCPTools(): Promise<any[]> {
+    return await this.mcpClient.listTools();
+  }
+
+  /**
+   * Execute a tool via MCP client
+   */
+  protected async executeTool(
+    name: string,
+    args: Record<string, unknown>
+  ): Promise<any> {
+    try {
+      const result = await this.mcpClient.callTool(name, args);
+      
+      // Extract the content from MCP response
+      if (result.content && Array.isArray(result.content)) {
+        const textContent = result.content.find((c: any) => c.type === 'text');
+        if (textContent) {
+          return textContent.text;
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error(`Error executing tool ${name}:`, error);
+      return {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Get system prompt for Salesforce assistant
+   * Can be overridden by child classes for provider-specific prompts
+   */
+  protected getSystemPrompt(): string {
+    return `You are an AI assistant integrated with Salesforce through the Model Context Protocol (MCP). You have access to various Salesforce tools that allow you to interact with Salesforce data and metadata.
+
+Your capabilities include:
+- Searching for Salesforce objects and describing their schemas
+- Querying records with support for relationships (SOQL)
+- Performing aggregate queries (COUNT, SUM, AVG, MIN, MAX with GROUP BY)
+- Creating, updating, and deleting records (DML operations)
+- Managing custom objects and fields
+- Configuring field-level security
+- Searching across multiple objects (SOSL)
+- Reading and writing Apex classes and triggers
+- Executing anonymous Apex code
+- Managing debug logs
+
+When a user asks about Salesforce data or operations:
+1. Carefully analyze what the user is asking for
+2. Determine which tool(s) are needed to fulfill the request
+3. Call the appropriate tools with correct parameters
+4. Interpret the results from the tools
+5. Present the information in a clear, user-friendly format
+6. If you need more information to complete a request, ask the user
+
+Guidelines:
+- Always be helpful, accurate, and concise
+- Format your responses for readability in a chat interface
+- Use proper Salesforce terminology
+- If an operation fails, explain why and suggest alternatives
+- For queries, present data in a structured format (lists, tables, etc.)
+- When creating or modifying records, confirm the action taken
+
+Remember: You're helping users interact with their Salesforce org, so be precise and careful with data operations.`;
+  }
+}

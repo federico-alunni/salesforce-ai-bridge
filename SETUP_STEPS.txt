@@ -1,0 +1,33 @@
+# Quick Setup Instructions
+
+## 1. Install Dependencies
+npm install
+
+## 2. Create .env file
+cp .env.example .env
+
+## 3. Get OpenRouter API Key
+# Visit: https://openrouter.ai/keys
+# Sign up (free, no credit card needed)
+# Create a new API key
+# Copy it and add to .env file
+
+## 4. Edit .env file
+# Add your OpenRouter API key:
+# OPENROUTER_API_KEY=sk-or-v1-your-key-here
+
+## 5. Authenticate Salesforce (if using CLI)
+sf org login web
+sf org display
+
+## 6. Start the server
+npm run dev
+
+## 7. Test it
+# Open a new terminal:
+curl http://localhost:3001/health
+
+# Send a test message:
+curl -X POST http://localhost:3001/api/chat -H "Content-Type: application/json" -d "{\"message\": \"Show me all accounts\"}"
+
+# You're ready! 🎉
