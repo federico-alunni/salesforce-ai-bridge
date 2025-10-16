@@ -140,25 +140,38 @@ export class MCPClientService {
     try {
       // Return cached tools if available
       if (this.toolsCache && this.toolsCache.length > 0) {
+        console.log(`Returning ${this.toolsCache.length} cached tools`);
         return this.toolsCache as MCPTool[];
       }
 
-      // Fetch tools from server
-      const response = await this.httpClient.post('/', {
+      // Fetch tools from server using the same method as fetchTools()
+      console.log('Fetching tools from MCP server...');
+      const response = await this.httpClient.post(`?sessionId=${this.sessionId}`, {
         jsonrpc: '2.0',
         id: Date.now(),
         method: 'tools/list',
         params: {},
       });
 
-      if (response.data && response.data.result && response.data.result.tools) {
-        this.toolsCache = response.data.result.tools;
+      // Parse SSE response
+      const data = this.parseSSEResponse(response.data);
+      
+      console.log('Tools response data:', JSON.stringify(data, null, 2));
+
+      if (data && data.result && data.result.tools) {
+        this.toolsCache = data.result.tools;
+        console.log(`✓ Fetched ${this.toolsCache?.length || 0} tools`);
         return this.toolsCache as MCPTool[];
       }
 
+      console.error('Invalid response structure:', data);
       throw new Error('Invalid response from MCP server');
     } catch (error) {
       console.error('Error listing tools:', error);
+      if (axios.isAxiosError(error)) {
+        console.error('Response status:', error.response?.status);
+        console.error('Response data:', error.response?.data);
+      }
       throw error;
     }
   }
@@ -184,6 +197,8 @@ export class MCPClientService {
       // Parse SSE response
       const data = this.parseSSEResponse(response.data);
 
+      console.log(`Tool ${name} response:`, JSON.stringify(data, null, 2));
+
       if (data && data.result) {
         return data.result;
       }
@@ -192,11 +207,13 @@ export class MCPClientService {
         throw new Error(`MCP tool error: ${data.error.message}`);
       }
 
+      console.error('Invalid tool response structure:', data);
       throw new Error('Invalid response from MCP server');
     } catch (error) {
       console.error(`Error calling tool ${name}:`, error);
       if (axios.isAxiosError(error)) {
-        console.error('Response:', error.response?.data);
+        console.error('Response status:', error.response?.status);
+        console.error('Response data:', error.response?.data);
       }
       throw error;
     }

@@ -3,9 +3,9 @@
 ## Complete System Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────────────┐
 │                          Salesforce Org                                  │
-│  ┌────────────────────────────────────────────────────────────────┐    │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
 │  │                Lightning Web Component (LWC)                     │    │
 │  │                        Chat Interface                            │    │
 │  └──────────────────────────┬───────────────────────────────────────┘    │
@@ -14,21 +14,21 @@
 └─────────────────────────────┼────────────────────────────────────────────┘
                               │
                               ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      AI Bridge Server (Node.js)                         │
-│  ┌────────────────────────────────────────────────────────────────┐    │
+┌──────────────────────────────────────────────────────────────────────────┐
+│                      AI Bridge Server (Node.js)                          │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
 │  │                    Express REST API                              │    │
 │  │              POST /api/chat, GET /health, etc.                   │    │
 │  └──────────────────────────┬───────────────────────────────────────┘    │
 │                             │                                            │
 │  ┌──────────────────────────▼───────────────────────────────────────┐    │
-│  │                  AIServiceFactory                                 │    │
-│  │   Creates service based on AI_PROVIDER env variable             │    │
+│  │                  AIServiceFactory                                │    │
+│  │   Creates service based on AI_PROVIDER env variable              │    │
 │  └──────────────────────────┬───────────────────────────────────────┘    │
 │                             │                                            │
-│         ┌───────────────────┴──────────────────┐                        │
+│         ┌───────────────────┴───────────────────┐                        │
 │         │                                       │                        │
-│  ┌──────▼──────────┐                  ┌────────▼────────┐               │
+│  ┌──────▼──────────┐                   ┌────────▼────────┐               │
 │  │ OpenRouterService│                  │AnthropicService │               │
 │  │ (Free Dev)       │                  │ (Paid Prod)     │               │
 │  └──────┬───────────┘                  └────────┬────────┘               │
@@ -38,36 +38,36 @@
 │         └───────────────────┬───────────────────┘                        │
 │                             │                                            │
 │  ┌──────────────────────────▼───────────────────────────────────────┐    │
-│  │                  MCPClientService                                 │    │
+│  │                  MCPClientService                                │    │
 │  │      Manages connection to MCP Salesforce Server                 │    │
 │  └──────────────────────────┬───────────────────────────────────────┘    │
 │                             │ MCP Protocol                               │
 └─────────────────────────────┼────────────────────────────────────────────┘
                               │
                               ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    MCP Salesforce Server                                │
-│  ┌────────────────────────────────────────────────────────────────┐    │
-│  │  Tool: salesforce_query_records                                 │    │
-│  │  Tool: salesforce_aggregate_query                               │    │
-│  │  Tool: salesforce_dml_records                                   │    │
-│  │  Tool: salesforce_describe_object                               │    │
-│  │  Tool: salesforce_search_objects                                │    │
-│  │  Tool: salesforce_search_all                                    │    │
-│  │  Tool: salesforce_read_apex                                     │    │
-│  │  Tool: salesforce_write_apex                                    │    │
-│  │  Tool: salesforce_execute_anonymous                             │    │
-│  │  Tool: salesforce_manage_debug_logs                             │    │
-│  │  Tool: salesforce_manage_field                                  │    │
-│  │  Tool: salesforce_manage_object                                 │    │
-│  │  Tool: ... and more (16+ tools total)                           │    │
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    MCP Salesforce Server                                 │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
+│  │  Tool: salesforce_query_records                                  │    │
+│  │  Tool: salesforce_aggregate_query                                │    │
+│  │  Tool: salesforce_dml_records                                    │    │
+│  │  Tool: salesforce_describe_object                                │    │
+│  │  Tool: salesforce_search_objects                                 │    │
+│  │  Tool: salesforce_search_all                                     │    │
+│  │  Tool: salesforce_read_apex                                      │    │
+│  │  Tool: salesforce_write_apex                                     │    │
+│  │  Tool: salesforce_execute_anonymous                              │    │
+│  │  Tool: salesforce_manage_debug_logs                              │    │
+│  │  Tool: salesforce_manage_field                                   │    │
+│  │  Tool: salesforce_manage_object                                  │    │
+│  │  Tool: ... and more (16+ tools total)                            │    │
 │  └──────────────────────────┬───────────────────────────────────────┘    │
 │                             │ Salesforce API                             │
 └─────────────────────────────┼────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          Salesforce Org                                  │
+│                          Salesforce Org                                 │
 │     Standard & Custom Objects, Apex, Metadata, etc.                     │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -138,11 +138,11 @@ Convert tools to provider format
 ┌───────────────────────────────────────┐
 │      Agentic Loop (max 10 iterations) │
 │                                       │
-│  1. Send message + tools to AI       │
+│  1. Send message + tools to AI        │
 │           │                           │
 │           ▼                           │
 │  2. AI responds with:                 │
-│     a) Final answer → DONE ✓         │
+│     a) Final answer → DONE ✓          │
 │     b) Tool call request → Continue   │
 │           │                           │
 │           ▼                           │
@@ -170,7 +170,7 @@ Return response to LWC
 
 ```
 ┌─────────────────────────────────────────┐
-│           IAIService Interface           │
+│           IAIService Interface          │
 │  + chat(sessionId, message): Promise    │
 │  + getProviderName(): string            │
 │  + getModelName(): string               │
@@ -179,16 +179,16 @@ Return response to LWC
                     │ implements
                     │
 ┌───────────────────▼─────────────────────┐
-│      BaseAIService (Abstract Class)      │
-│  # config: Config                        │
+│      BaseAIService (Abstract Class)     │
+│  # config: Config                       │
 │  # mcpClient: MCPClientService          │
-│  # sessionManager: SessionManager        │
-│                                          │
+│  # sessionManager: SessionManager       │
+│                                         │
 │  # getMCPTools(): Promise<Tool[]>       │
 │  # executeTool(name, args): Promise     │
 │  # getSystemPrompt(): string            │
-│                                          │
-│  Abstract methods:                       │
+│                                         │
+│  Abstract methods:                      │
 │  + chat(sessionId, message): Promise    │
 │  + getProviderName(): string            │
 │  + getModelName(): string               │
