@@ -11,7 +11,7 @@ USER_RATE_LIMIT_PER_MINUTE=10
 ## HTTP Headers (Required)
 
 ```
-X-Salesforce-Session: <Salesforce Access Token>
+X-Salesforce-Access-Token: <OAuth Access Token>
 X-Salesforce-Instance-URL: <Instance URL>
 ```
 
@@ -20,7 +20,7 @@ X-Salesforce-Instance-URL: <Instance URL>
 ```bash
 curl -X POST https://your-bridge.onrender.com/api/chat \
   -H "Content-Type: application/json" \
-  -H "X-Salesforce-Session: 00D..." \
+  -H "X-Salesforce-Access-Token: 00D..." \
   -H "X-Salesforce-Instance-URL: https://yourinstance.salesforce.com" \
   -d '{"message": "Show me all accounts"}'
 ```
@@ -59,7 +59,7 @@ async sendMessage(message) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-Salesforce-Session': token,
+            'X-Salesforce-Access-Token': token,
             'X-Salesforce-Instance-URL': instanceUrl
         },
         body: JSON.stringify({ message })
@@ -120,7 +120,7 @@ Response:
 
 ### "Missing required Salesforce authentication headers"
 
-✅ Check header names are exact: `X-Salesforce-Session`, `X-Salesforce-Instance-URL`
+✅ Check header names are exact: `X-Salesforce-Access-Token`, `X-Salesforce-Instance-URL`
 
 ### "Invalid or expired Salesforce access token"
 

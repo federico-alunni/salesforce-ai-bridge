@@ -204,7 +204,7 @@ Send a message and get an AI response.
 **Headers (required when REQUIRE_SALESFORCE_AUTH=true):**
 
 ```
-X-Salesforce-Session: <Salesforce Access Token>
+X-Salesforce-Access-Token: <OAuth Access Token>
 X-Salesforce-Instance-URL: <Salesforce Instance URL>
 Content-Type: application/json
 ```
@@ -235,7 +235,7 @@ Content-Type: application/json
   "error": "Unauthorized",
   "message": "Missing required Salesforce authentication headers",
   "required": [
-    "X-Salesforce-Session (access token)",
+    "X-Salesforce-Access-Token (OAuth access token)",
     "X-Salesforce-Instance-URL (instance URL)"
   ]
 }
@@ -351,7 +351,7 @@ export default class ChatComponent extends LightningElement {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Salesforce-Session": accessToken,
+        "X-Salesforce-Access-Token": accessToken,
         "X-Salesforce-Instance-URL": instanceUrl,
       },
       body: JSON.stringify({
@@ -504,7 +504,7 @@ The bridge provides access to all MCP Salesforce Server tools:
 
 ### Authentication Flow
 
-1. **User makes request** from LWC with `X-Salesforce-Session` header
+1. **User makes request** from LWC with `X-Salesforce-Access-Token` header
 2. **Bridge validates token** by calling Salesforce `/services/oauth2/userinfo`
 3. **User info extracted** (userId, username, orgId) and cached
 4. **Rate limit checked** for the specific user

@@ -27,7 +27,7 @@ The AI Bridge now supports **per-user authentication** using Salesforce OAuth to
 │         │                         │getSessionId()│             │
 │         │                         └──────────────┘             │
 │         │ 2. Send request with                                 │
-│         │    X-Salesforce-Session header                       │
+│         │    X-Salesforce-Access-Token header                  │
 └─────────┼─────────────────────────────────────────────────────┘
           │
           ▼
@@ -222,7 +222,7 @@ export default class SalesforceAiChat extends LightningElement {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Salesforce-Session": accessToken,
+          "X-Salesforce-Access-Token": accessToken,
           "X-Salesforce-Instance-URL": instanceUrl,
         },
         body: JSON.stringify({
@@ -546,7 +546,7 @@ maskToken(token) {
 
 curl -X POST https://your-bridge.onrender.com/api/chat \
   -H "Content-Type: application/json" \
-  -H "X-Salesforce-Session: YOUR_SESSION_ID" \
+  -H "X-Salesforce-Access-Token: YOUR_ACCESS_TOKEN" \
   -H "X-Salesforce-Instance-URL: https://yourinstance.salesforce.com" \
   -d '{
     "message": "Show me my open opportunities"
@@ -601,7 +601,7 @@ Token: 00D1...XXXX (masked)
 **Check**:
 
 1. Headers are being sent correctly
-2. Header names are exact: `X-Salesforce-Session`, `X-Salesforce-Instance-URL`
+2. Header names are exact: `X-Salesforce-Access-Token`, `X-Salesforce-Instance-URL`
 3. CORS is configured correctly
 
 ### "Invalid or expired Salesforce access token"

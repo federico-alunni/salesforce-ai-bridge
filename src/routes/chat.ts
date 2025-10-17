@@ -56,12 +56,12 @@ export function createChatRouter(
     }
 
     try {
-      // Extract headers
-      const accessToken = req.headers['x-salesforce-session'] as string;
+      // Extract headers - now using OAuth access token
+      const accessToken = req.headers['x-salesforce-access-token'] as string;
       const instanceUrl = req.headers['x-salesforce-instance-url'] as string;
 
       // DEBUG: Log access token (REMOVE IN PRODUCTION)
-      console.log('🔍 [DEBUG] Access Token from header:', accessToken);
+      console.log('🔍 [DEBUG] OAuth Access Token from header:', accessToken);
       console.log('🔍 [DEBUG] Instance URL from header:', instanceUrl);
 
       // Check if headers are present
@@ -71,7 +71,7 @@ export function createChatRouter(
           error: 'Unauthorized',
           message: 'Missing required Salesforce authentication headers',
           required: [
-            'X-Salesforce-Session (access token)',
+            'X-Salesforce-Access-Token (OAuth access token)',
             'X-Salesforce-Instance-URL (instance URL)',
           ],
         });

@@ -82,9 +82,9 @@ class BridgeServer {
     // Request logging - mask sensitive headers
     this.app.use((req: Request, res: Response, next: NextFunction) => {
       const sanitizedHeaders = { ...req.headers };
-      if (sanitizedHeaders['x-salesforce-session']) {
-        const token = sanitizedHeaders['x-salesforce-session'] as string;
-        sanitizedHeaders['x-salesforce-session'] = this.salesforceAuthService.maskToken(token);
+      if (sanitizedHeaders['x-salesforce-access-token']) {
+        const token = sanitizedHeaders['x-salesforce-access-token'] as string;
+        sanitizedHeaders['x-salesforce-access-token'] = this.salesforceAuthService.maskToken(token);
       }
       console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
       next();
