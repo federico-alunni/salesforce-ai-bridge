@@ -60,8 +60,13 @@ export function createChatRouter(
       const accessToken = req.headers['x-salesforce-session'] as string;
       const instanceUrl = req.headers['x-salesforce-instance-url'] as string;
 
+      // DEBUG: Log access token (REMOVE IN PRODUCTION)
+      console.log('🔍 [DEBUG] Access Token from header:', accessToken);
+      console.log('🔍 [DEBUG] Instance URL from header:', instanceUrl);
+
       // Check if headers are present
       if (!accessToken || !instanceUrl) {
+        console.log('🔍 [DEBUG] Response Status Code: 401 (Missing headers)');
         return res.status(401).json({
           error: 'Unauthorized',
           message: 'Missing required Salesforce authentication headers',
@@ -110,6 +115,7 @@ export function createChatRouter(
 
         // Check if limit exceeded
         if (rateLimitInfo.requests.length >= config.userRateLimitPerMinute) {
+          console.log('🔍 [DEBUG] Response Status Code: 429 (Rate limit exceeded)');
           return res.status(429).json({
             error: 'Too Many Requests',
             message: `Rate limit exceeded. Maximum ${config.userRateLimitPerMinute} requests per minute per user.`,
@@ -124,6 +130,7 @@ export function createChatRouter(
         next();
       } catch (error) {
         console.error('Salesforce token validation error:', error);
+        console.log('🔍 [DEBUG] Response Status Code: 401 (Token validation failed)');
         
         return res.status(401).json({
           error: 'Unauthorized',
@@ -132,6 +139,7 @@ export function createChatRouter(
       }
     } catch (error) {
       console.error('Auth middleware error:', error);
+      console.log('🔍 [DEBUG] Response Status Code: 500 (Auth middleware error)');
       return res.status(500).json({
         error: 'Internal Server Error',
         message: 'Failed to process authentication',
@@ -148,6 +156,7 @@ export function createChatRouter(
       const { message, sessionId: providedSessionId } = req.body as ChatRequest;
 
       if (!message || typeof message !== 'string') {
+        console.log('🔍 [DEBUG] Response Status Code: 400 (Invalid message)');
         return res.status(400).json({
           error: 'Message is required and must be a string',
         });
@@ -199,6 +208,10 @@ export function createChatRouter(
         timestamp: Date.now(),
       };
 
+      // DEBUG: Log response status
+      console.log('🔍 [DEBUG] Response Status Code: 200');
+      console.log('🔍 [DEBUG] Response Body:', JSON.stringify(response, null, 2));
+
       res.json(response);
     } catch (error) {
       console.error('Error in chat endpoint:', error);
@@ -206,6 +219,7 @@ export function createChatRouter(
       // Check for specific error types
       if (error instanceof Error) {
         if (error.message.includes('permission') || error.message.includes('access')) {
+          console.log('🔍 [DEBUG] Response Status Code: 403');
           return res.status(403).json({
             error: 'Forbidden',
             message: 'Insufficient permissions for this operation',
@@ -214,6 +228,7 @@ export function createChatRouter(
         }
       }
       
+      console.log('🔍 [DEBUG] Response Status Code: 500');
       res.status(500).json({
         error: 'An error occurred processing your request',
         details: error instanceof Error ? error.message : 'Unknown error',
