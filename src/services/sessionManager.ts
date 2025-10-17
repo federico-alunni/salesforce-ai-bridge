@@ -1,4 +1,4 @@
-import { ChatSession } from '../types/index.js';
+import { ChatSession, SalesforceAuth } from '../types/index.js';
 
 export class SessionManager {
   private sessions: Map<string, ChatSession> = new Map();
@@ -9,12 +9,13 @@ export class SessionManager {
     this.cleanupInterval = setInterval(() => this.cleanupExpiredSessions(), 60000);
   }
 
-  createSession(sessionId: string): ChatSession {
+  createSession(sessionId: string, salesforceAuth?: SalesforceAuth): ChatSession {
     const session: ChatSession = {
       sessionId,
       messages: [],
       createdAt: Date.now(),
       lastActivityAt: Date.now(),
+      salesforceAuth,
     };
     this.sessions.set(sessionId, session);
     return session;
@@ -31,6 +32,15 @@ export class SessionManager {
   updateSession(sessionId: string, session: ChatSession): void {
     session.lastActivityAt = Date.now();
     this.sessions.set(sessionId, session);
+  }
+
+  updateSessionAuth(sessionId: string, salesforceAuth: SalesforceAuth): void {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.salesforceAuth = salesforceAuth;
+      session.lastActivityAt = Date.now();
+      this.sessions.set(sessionId, session);
+    }
   }
 
   deleteSession(sessionId: string): void {

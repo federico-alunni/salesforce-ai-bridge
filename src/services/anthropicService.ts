@@ -22,7 +22,7 @@ export class AnthropicService extends BaseAIService {
     return this.model;
   }
 
-  async chat(messages: ChatMessage[], userMessage: string): Promise<string> {
+  async chat(messages: ChatMessage[], userMessage: string, salesforceAuth?: any): Promise<string> {
     try {
       // Get available tools from MCP server
       const tools = await this.getToolsForClaude();
@@ -73,10 +73,11 @@ export class AnthropicService extends BaseAIService {
 
         console.log(`[Anthropic] Iteration ${iteration}: Using tool ${toolUseBlock.name}`);
 
-        // Execute the tool via MCP
+        // Execute the tool via MCP with Salesforce auth context
         const toolResult = await this.executeTool(
           toolUseBlock.name,
-          toolUseBlock.input as Record<string, unknown>
+          toolUseBlock.input as Record<string, unknown>,
+          salesforceAuth
         );
 
         // Add assistant message and tool result to conversation

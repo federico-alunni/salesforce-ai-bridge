@@ -6,6 +6,7 @@ import { MCPClientService } from './services/mcpClient.js';
 import { IAIService } from './services/base/AIServiceBase.js';
 import { AIServiceFactory } from './services/AIServiceFactory.js';
 import { SessionManager } from './services/sessionManager.js';
+import { SalesforceAuthService } from './services/salesforceAuth.js';
 import { createChatRouter } from './routes/chat.js';
 
 // Load environment variables
@@ -17,6 +18,7 @@ class BridgeServer {
   private mcpClient: MCPClientService;
   private aiService: IAIService;
   private sessionManager: SessionManager;
+  private salesforceAuthService: SalesforceAuthService;
 
   constructor() {
     this.config = loadConfig();
@@ -27,14 +29,49 @@ class BridgeServer {
     this.aiService = AIServiceFactory.createAIService(this.config, this.mcpClient);
     
     this.sessionManager = new SessionManager(this.config.sessionTimeoutMs);
+    this.salesforceAuthService = new SalesforceAuthService(
+      this.config.salesforceTokenValidationTTL
+    );
   }
 
   private setupMiddleware(): void {
-    // CORS configuration
+    // CORS configuration - allow Salesforce domains
+    const allowedOrigins = [
+      ...this.config.allowedOrigins,
+      // Add Salesforce domains if not using wildcard
+      ...(this.config.allowedOrigins.includes('*') ? [] : [
+        'https://*.lightning.force.com',
+        'https://*.cloudforce.com',
+        'https://*.salesforce.com',
+        'https://*.visualforce.com',
+      ]),
+    ];
+
     this.app.use(
       cors({
-        origin: this.config.allowedOrigins,
+        origin: (origin, callback) => {
+          // Allow requests with no origin (mobile apps, Postman, etc.)
+          if (!origin) return callback(null, true);
+
+          // Check if origin matches allowed patterns
+          const isAllowed = allowedOrigins.some(allowed => {
+            if (allowed === '*') return true;
+            if (allowed.includes('*')) {
+              // Convert wildcard pattern to regex
+              const pattern = allowed.replace(/\*/g, '.*');
+              return new RegExp(`^${pattern}$`).test(origin);
+            }
+            return allowed === origin;
+          });
+
+          if (isAllowed) {
+            callback(null, true);
+          } else {
+            callback(new Error('Not allowed by CORS'));
+          }
+        },
         credentials: true,
+        exposedHeaders: ['X-Session-ID'],
       })
     );
 
@@ -42,8 +79,13 @@ class BridgeServer {
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
 
-    // Request logging
+    // Request logging - mask sensitive headers
     this.app.use((req: Request, res: Response, next: NextFunction) => {
+      const sanitizedHeaders = { ...req.headers };
+      if (sanitizedHeaders['x-salesforce-session']) {
+        const token = sanitizedHeaders['x-salesforce-session'] as string;
+        sanitizedHeaders['x-salesforce-session'] = this.salesforceAuthService.maskToken(token);
+      }
       console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
       next();
     });
@@ -58,13 +100,20 @@ class BridgeServer {
         mcpConnected: this.mcpClient.isConnected(),
         aiProvider: this.aiService.getProviderName(),
         aiModel: this.aiService.getModelName(),
+        authRequired: this.config.requireSalesforceAuth,
+        authMethod: this.config.requireSalesforceAuth ? 'salesforce-oauth' : 'none',
       });
     });
 
     // Chat routes
     this.app.use(
       '/api/chat',
-      createChatRouter(this.sessionManager, this.aiService)
+      createChatRouter(
+        this.sessionManager,
+        this.aiService,
+        this.config,
+        this.salesforceAuthService
+      )
     );
 
     // 404 handler
@@ -126,6 +175,7 @@ class BridgeServer {
   private async shutdown(): Promise<void> {
     try {
       this.sessionManager.destroy();
+      this.salesforceAuthService.destroy();
       await this.mcpClient.disconnect();
       console.log('Shutdown complete');
     } catch (error) {

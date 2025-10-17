@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { Config } from '../config/config.js';
+import { SalesforceAuth } from '../types/index.js';
 
 interface MCPTool {
   name: string;
@@ -18,6 +19,15 @@ interface MCPToolResponse {
     [key: string]: any;
   }>;
   isError?: boolean;
+}
+
+interface MCPRequestMeta {
+  salesforceAuth?: {
+    accessToken: string;
+    instanceUrl: string;
+    userId: string;
+    username: string;
+  };
 }
 
 export class MCPClientService {
@@ -176,7 +186,11 @@ export class MCPClientService {
     }
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResponse> {
+  async callTool(
+    name: string,
+    args: Record<string, unknown>,
+    salesforceAuth?: SalesforceAuth
+  ): Promise<MCPToolResponse> {
     if (!this.connected) {
       throw new Error('MCP client not connected');
     }
@@ -184,15 +198,31 @@ export class MCPClientService {
     try {
       console.log(`Calling MCP tool: ${name}`, JSON.stringify(args, null, 2));
       
-      const response = await this.httpClient.post(`?sessionId=${this.sessionId}`, {
+      // Inject Salesforce auth into arguments if provided
+      const toolArguments = { ...args };
+      if (salesforceAuth) {
+        toolArguments._salesforceAuth = {
+          accessToken: salesforceAuth.accessToken,
+          instanceUrl: salesforceAuth.instanceUrl,
+          username: salesforceAuth.userInfo.username,
+        };
+        console.log(
+          `Including Salesforce auth for user: ${salesforceAuth.userInfo.username} (${salesforceAuth.userInfo.userId})`
+        );
+      }
+      
+      // Build the request
+      const requestBody: any = {
         jsonrpc: '2.0',
         id: Date.now(),
         method: 'tools/call',
         params: {
           name,
-          arguments: args,
+          arguments: toolArguments,
         },
-      });
+      };
+      
+      const response = await this.httpClient.post(`?sessionId=${this.sessionId}`, requestBody);
 
       // Parse SSE response
       const data = this.parseSSEResponse(response.data);

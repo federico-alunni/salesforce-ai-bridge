@@ -14,11 +14,27 @@ export interface ChatMessage {
   name?: string;
 }
 
+export interface SalesforceUserInfo {
+  userId: string;
+  username: string;
+  organizationId: string;
+  email?: string;
+  displayName?: string;
+}
+
+export interface SalesforceAuth {
+  accessToken: string;
+  instanceUrl: string;
+  userInfo: SalesforceUserInfo;
+  validatedAt: number;
+}
+
 export interface ChatSession {
   sessionId: string;
   messages: ChatMessage[];
   createdAt: number;
   lastActivityAt: number;
+  salesforceAuth?: SalesforceAuth;
 }
 
 export interface ChatRequest {
@@ -41,4 +57,10 @@ export interface ToolResult {
   toolCallId: string;
   result: unknown;
   isError: boolean;
+}
+
+export interface RateLimitInfo {
+  userId: string;
+  requests: number[];
+  lastCleanup: number;
 }

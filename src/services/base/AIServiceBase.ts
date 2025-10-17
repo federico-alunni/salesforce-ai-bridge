@@ -1,4 +1,4 @@
-import { ChatMessage } from '../../types';
+import { ChatMessage, SalesforceAuth } from '../../types';
 import { MCPClientService } from '../mcpClient';
 
 /**
@@ -10,9 +10,10 @@ export interface IAIService {
    * Send a chat message and get AI response with tool execution
    * @param messages - Conversation history
    * @param userMessage - Current user message
+   * @param salesforceAuth - Optional Salesforce authentication context
    * @returns AI response text
    */
-  chat(messages: ChatMessage[], userMessage: string): Promise<string>;
+  chat(messages: ChatMessage[], userMessage: string, salesforceAuth?: SalesforceAuth): Promise<string>;
 
   /**
    * Get the name of the AI provider
@@ -36,7 +37,7 @@ export abstract class BaseAIService implements IAIService {
     this.mcpClient = mcpClient;
   }
 
-  abstract chat(messages: ChatMessage[], userMessage: string): Promise<string>;
+  abstract chat(messages: ChatMessage[], userMessage: string, salesforceAuth?: SalesforceAuth): Promise<string>;
   abstract getProviderName(): string;
   abstract getModelName(): string;
 
@@ -53,10 +54,11 @@ export abstract class BaseAIService implements IAIService {
    */
   protected async executeTool(
     name: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    salesforceAuth?: SalesforceAuth
   ): Promise<any> {
     try {
-      const result = await this.mcpClient.callTool(name, args);
+      const result = await this.mcpClient.callTool(name, args, salesforceAuth);
       
       // Extract the content from MCP response
       if (result.content && Array.isArray(result.content)) {

@@ -16,6 +16,10 @@ export interface Config {
   mcpServerUrl: string;
   allowedOrigins: string[];
   sessionTimeoutMs: number;
+  // Salesforce Auth configuration
+  requireSalesforceAuth: boolean;
+  salesforceTokenValidationTTL: number;
+  userRateLimitPerMinute: number;
 }
 
 export function loadConfig(): Config {
@@ -56,5 +60,9 @@ export function loadConfig(): Config {
     mcpServerUrl: process.env.MCP_SERVER_URL,
     allowedOrigins: process.env.ALLOWED_ORIGINS?.split(',') || ['*'],
     sessionTimeoutMs: parseInt(process.env.SESSION_TIMEOUT_MS || '1800000', 10),
+    // Salesforce Auth config
+    requireSalesforceAuth: process.env.REQUIRE_SALESFORCE_AUTH === 'true',
+    salesforceTokenValidationTTL: parseInt(process.env.SALESFORCE_TOKEN_VALIDATION_TTL || '300000', 10),
+    userRateLimitPerMinute: parseInt(process.env.USER_RATE_LIMIT_PER_MINUTE || '10', 10),
   };
 }

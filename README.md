@@ -45,9 +45,12 @@ A Node.js bridge server that connects Salesforce Lightning Web Components (LWC) 
 - **Tool Calling**: AI can execute Salesforce operations through MCP tools
 - **Agentic Loop**: Multi-step reasoning with automatic tool execution
 - **Extensible**: Interface-based design makes adding new AI providers straightforward
+- 🔐 **OAuth User Context**: Per-user authentication with Salesforce OAuth tokens
 - 🔐 **CORS Support**: Configurable CORS for Salesforce domains
 - 🛠️ **Full Salesforce Toolset**: Access to all 16+ MCP Salesforce tools
 - ⚡ **Real-time Processing**: Agentic loop for multi-step operations
+- 🚦 **Rate Limiting**: Per-user rate limiting to prevent abuse
+- 🔒 **Token Validation**: Automatic Salesforce token validation with caching
 
 ## Prerequisites
 
@@ -108,6 +111,17 @@ ALLOWED_ORIGINS=https://your-domain.lightning.force.com
 
 # Session timeout (30 minutes = 1800000 ms)
 SESSION_TIMEOUT_MS=1800000
+
+# Salesforce Authentication Configuration
+# Set to true to require Salesforce OAuth tokens on every request
+REQUIRE_SALESFORCE_AUTH=true
+
+# Token validation cache TTL (5 minutes = 300000 ms)
+# Reduces API calls to Salesforce by caching token validation
+SALESFORCE_TOKEN_VALIDATION_TTL=300000
+
+# Per-user rate limit (requests per minute)
+USER_RATE_LIMIT_PER_MINUTE=10
 ```
 
 ## MCP Server Setup
@@ -187,7 +201,15 @@ Expected response:
 
 Send a message and get an AI response.
 
-**Request:**
+**Headers (required when REQUIRE_SALESFORCE_AUTH=true):**
+
+```
+X-Salesforce-Session: <Salesforce Access Token>
+X-Salesforce-Instance-URL: <Salesforce Instance URL>
+Content-Type: application/json
+```
+
+**Request Body:**
 
 ```json
 {
@@ -196,13 +218,46 @@ Send a message and get an AI response.
 }
 ```
 
-**Response:**
+**Response (Success - 200):**
 
 ```json
 {
   "sessionId": "uuid-v4",
   "message": "Here are the accounts created this month: ...",
   "timestamp": 1234567890
+}
+```
+
+**Response (Unauthorized - 401):**
+
+```json
+{
+  "error": "Unauthorized",
+  "message": "Missing required Salesforce authentication headers",
+  "required": [
+    "X-Salesforce-Session (access token)",
+    "X-Salesforce-Instance-URL (instance URL)"
+  ]
+}
+```
+
+**Response (Rate Limited - 429):**
+
+```json
+{
+  "error": "Too Many Requests",
+  "message": "Rate limit exceeded. Maximum 10 requests per minute per user.",
+  "retryAfter": 60
+}
+```
+
+**Response (Forbidden - 403):**
+
+```json
+{
+  "error": "Forbidden",
+  "message": "Insufficient permissions for this operation",
+  "details": "User lacks required permissions"
 }
 ```
 
@@ -249,6 +304,20 @@ Clear a chat session.
 
 Health check endpoint.
 
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "timestamp": 1234567890,
+  "mcpConnected": true,
+  "aiProvider": "OpenRouter",
+  "aiModel": "meta-llama/llama-4-maverick:free",
+  "authRequired": true,
+  "authMethod": "salesforce-oauth"
+}
+```
+
 ## Example Chat Interactions
 
 Once connected from your LWC, users can ask:
@@ -263,22 +332,92 @@ Once connected from your LWC, users can ask:
 
 ## Integrating with LWC
 
-Your LWC should make HTTP requests to this bridge server:
+Your LWC should make HTTP requests to this bridge server with Salesforce OAuth credentials:
 
 ```javascript
 // Example LWC code
-async function sendMessage(message, sessionId) {
-  const response = await fetch("http://localhost:3001/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ message, sessionId }),
-  });
+import { LightningElement, track } from "lwc";
+import { getSessionId, getOrgId } from "c/sessionService"; // Your session service
 
-  return await response.json();
+export default class ChatComponent extends LightningElement {
+  @track sessionId;
+
+  async sendMessage(message) {
+    // Get Salesforce session info
+    const accessToken = await getSessionId(); // Your method to get session ID
+    const instanceUrl = window.location.origin; // Or from getOrgId()
+
+    const response = await fetch("https://your-bridge.onrender.com/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Salesforce-Session": accessToken,
+        "X-Salesforce-Instance-URL": instanceUrl,
+      },
+      body: JSON.stringify({
+        message,
+        sessionId: this.sessionId,
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("Authentication failed. Please refresh your session.");
+      }
+      if (response.status === 429) {
+        throw new Error("Rate limit exceeded. Please wait a moment.");
+      }
+      throw new Error("Request failed");
+    }
+
+    const data = await response.json();
+    this.sessionId = data.sessionId; // Store for next request
+    return data;
+  }
 }
 ```
+
+### Getting Salesforce Session ID in LWC
+
+You have several options to get the Salesforce session ID:
+
+**Option 1: Via Apex Controller (Recommended)**
+
+```apex
+// SessionController.cls
+public with sharing class SessionController {
+    @AuraEnabled(cacheable=false)
+    public static String getSessionId() {
+        return UserInfo.getSessionId();
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static String getInstanceUrl() {
+        return URL.getOrgDomainUrl().toExternalForm();
+    }
+}
+```
+
+```javascript
+// In your LWC
+import getSessionId from '@salesforce/apex/SessionController.getSessionId';
+import getInstanceUrl from '@salesforce/apex/SessionController.getInstanceUrl';
+
+async sendMessage(message) {
+  const accessToken = await getSessionId();
+  const instanceUrl = await getInstanceUrl();
+
+  // Make request with headers...
+}
+```
+
+**Option 2: Via Connected App / Named Credential**
+
+If you're using a Connected App for OAuth, you can use the OAuth token from the Connected App.
+
+**Option 3: Via Custom Setting**
+
+Store session info in a custom setting and retrieve it via Apex.
 
 ## Project Structure
 
@@ -350,11 +489,38 @@ The bridge provides access to all MCP Salesforce Server tools:
 
 ## Security Considerations
 
+- ✅ **OAuth User Context** - All operations execute as the authenticated Salesforce user
+- ✅ **Token Validation** - Access tokens are validated against Salesforce on every request
+- ✅ **Token Caching** - Validated tokens cached for 5 minutes to reduce API calls
+- ✅ **Rate Limiting** - Per-user rate limiting (10 requests/minute by default)
+- ✅ **Token Masking** - Access tokens are masked in all logs
+- ✅ **CORS Configuration** - Automatic support for Salesforce domains
 - **Never commit `.env` file** - Contains sensitive credentials
-- **Use HTTPS in production** - Add SSL/TLS termination
-- **Validate CORS origins** - Restrict to your Salesforce domain
-- **Rate limiting** - Consider adding rate limiting for production
-- **Authentication** - Add authentication between LWC and bridge if needed
+- **Use HTTPS in production** - Add SSL/TLS termination (automatic on Render)
+- **Validate CORS origins** - Restrict to your specific Salesforce domains
+- **Monitor rate limits** - Adjust USER_RATE_LIMIT_PER_MINUTE as needed
+- **Session timeouts** - Sessions expire after 30 minutes of inactivity
+- **MCP Server Security** - Ensure your MCP server also validates user context
+
+### Authentication Flow
+
+1. **User makes request** from LWC with `X-Salesforce-Session` header
+2. **Bridge validates token** by calling Salesforce `/services/oauth2/userinfo`
+3. **User info extracted** (userId, username, orgId) and cached
+4. **Rate limit checked** for the specific user
+5. **MCP request includes** user context in `meta.salesforceAuth` field
+6. **MCP server** executes operations as that specific user
+7. **Response returned** to the LWC
+
+### Disabling Authentication (Development Only)
+
+For local development/testing, you can disable authentication:
+
+```env
+REQUIRE_SALESFORCE_AUTH=false
+```
+
+⚠️ **Warning**: Only use this for development. Never deploy to production without authentication!
 
 ## Development
 

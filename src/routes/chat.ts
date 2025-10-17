@@ -1,14 +1,146 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { SessionManager } from '../services/sessionManager.js';
 import { IAIService } from '../services/base/AIServiceBase.js';
-import { ChatRequest, ChatResponse } from '../types/index.js';
+import { SalesforceAuthService } from '../services/salesforceAuth.js';
+import { ChatRequest, ChatResponse, RateLimitInfo, SalesforceAuth } from '../types/index.js';
+import { Config } from '../config/config.js';
+
+// Extend Express Request to include Salesforce auth
+declare global {
+  namespace Express {
+    interface Request {
+      salesforceAuth?: SalesforceAuth;
+    }
+  }
+}
 
 export function createChatRouter(
   sessionManager: SessionManager,
-  aiService: IAIService
+  aiService: IAIService,
+  config: Config,
+  salesforceAuthService: SalesforceAuthService
 ): Router {
   const router = Router();
+
+  // Rate limiting storage (in production, use Redis or similar)
+  const rateLimitMap = new Map<string, RateLimitInfo>();
+
+  // Cleanup rate limit entries every minute
+  setInterval(() => {
+    const now = Date.now();
+    const oneMinuteAgo = now - 60000;
+    
+    for (const [userId, info] of rateLimitMap.entries()) {
+      // Remove old requests
+      info.requests = info.requests.filter(timestamp => timestamp > oneMinuteAgo);
+      
+      // Remove empty entries
+      if (info.requests.length === 0 && now - info.lastCleanup > 300000) {
+        rateLimitMap.delete(userId);
+      } else {
+        info.lastCleanup = now;
+      }
+    }
+  }, 60000);
+
+  // Middleware to extract and validate Salesforce authentication
+  const salesforceAuthMiddleware = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    // Skip auth if not required
+    if (!config.requireSalesforceAuth) {
+      return next();
+    }
+
+    try {
+      // Extract headers
+      const accessToken = req.headers['x-salesforce-session'] as string;
+      const instanceUrl = req.headers['x-salesforce-instance-url'] as string;
+
+      // Check if headers are present
+      if (!accessToken || !instanceUrl) {
+        return res.status(401).json({
+          error: 'Unauthorized',
+          message: 'Missing required Salesforce authentication headers',
+          required: [
+            'X-Salesforce-Session (access token)',
+            'X-Salesforce-Instance-URL (instance URL)',
+          ],
+        });
+      }
+
+      // Validate the token and get user info
+      try {
+        const salesforceAuth = await salesforceAuthService.validateToken(
+          accessToken,
+          instanceUrl
+        );
+
+        // Store the full token for MCP requests (not the masked one)
+        const fullAuth: SalesforceAuth = {
+          ...salesforceAuth,
+          accessToken, // Keep the original token for MCP calls
+        };
+
+        // Attach to request
+        req.salesforceAuth = fullAuth;
+
+        // Check rate limiting
+        const userId = fullAuth.userInfo.userId;
+        const now = Date.now();
+        const oneMinuteAgo = now - 60000;
+
+        let rateLimitInfo = rateLimitMap.get(userId);
+        if (!rateLimitInfo) {
+          rateLimitInfo = {
+            userId,
+            requests: [],
+            lastCleanup: now,
+          };
+          rateLimitMap.set(userId, rateLimitInfo);
+        }
+
+        // Remove requests older than 1 minute
+        rateLimitInfo.requests = rateLimitInfo.requests.filter(
+          timestamp => timestamp > oneMinuteAgo
+        );
+
+        // Check if limit exceeded
+        if (rateLimitInfo.requests.length >= config.userRateLimitPerMinute) {
+          return res.status(429).json({
+            error: 'Too Many Requests',
+            message: `Rate limit exceeded. Maximum ${config.userRateLimitPerMinute} requests per minute per user.`,
+            retryAfter: 60,
+          });
+        }
+
+        // Add current request
+        rateLimitInfo.requests.push(now);
+        rateLimitMap.set(userId, rateLimitInfo);
+
+        next();
+      } catch (error) {
+        console.error('Salesforce token validation error:', error);
+        
+        return res.status(401).json({
+          error: 'Unauthorized',
+          message: error instanceof Error ? error.message : 'Invalid Salesforce credentials',
+        });
+      }
+    } catch (error) {
+      console.error('Auth middleware error:', error);
+      return res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Failed to process authentication',
+      });
+    }
+  };
+
+  // Apply auth middleware to all routes
+  router.use(salesforceAuthMiddleware);
 
   // POST /api/chat - Send a message and get AI response
   router.post('/', async (req: Request, res: Response) => {
@@ -21,12 +153,19 @@ export function createChatRouter(
         });
       }
 
+      // Get Salesforce auth from middleware
+      const salesforceAuth = req.salesforceAuth;
+
       // Get or create session
       const sessionId = providedSessionId || uuidv4();
       let session = sessionManager.getSession(sessionId);
 
       if (!session) {
-        session = sessionManager.createSession(sessionId);
+        session = sessionManager.createSession(sessionId, salesforceAuth);
+      } else if (salesforceAuth) {
+        // Update session with current auth context
+        sessionManager.updateSessionAuth(sessionId, salesforceAuth);
+        session = sessionManager.getSession(sessionId)!;
       }
 
       // Add user message to session
@@ -36,10 +175,11 @@ export function createChatRouter(
         timestamp: Date.now(),
       });
 
-      // Get AI response
+      // Get AI response with Salesforce auth context
       const aiResponse = await aiService.chat(
         session.messages.slice(0, -1), // Don't include the message we just added
-        message
+        message,
+        salesforceAuth
       );
 
       // Add AI response to session
@@ -62,6 +202,18 @@ export function createChatRouter(
       res.json(response);
     } catch (error) {
       console.error('Error in chat endpoint:', error);
+      
+      // Check for specific error types
+      if (error instanceof Error) {
+        if (error.message.includes('permission') || error.message.includes('access')) {
+          return res.status(403).json({
+            error: 'Forbidden',
+            message: 'Insufficient permissions for this operation',
+            details: error.message,
+          });
+        }
+      }
+      
       res.status(500).json({
         error: 'An error occurred processing your request',
         details: error instanceof Error ? error.message : 'Unknown error',
