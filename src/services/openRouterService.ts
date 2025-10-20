@@ -51,6 +51,7 @@ export class OpenRouterService extends BaseAIService {
         },
       ];
 
+      console.log(`📝 Including ${conversationMessages.length} messages in conversation (${messages.length} from history + 1 current)`);
       console.log(`Processing message with ${tools.length} available tools`);
 
       // Call OpenRouter with tools

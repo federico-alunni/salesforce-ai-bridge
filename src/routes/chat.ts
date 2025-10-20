@@ -185,6 +185,7 @@ export function createChatRouter(
       });
 
       // Get AI response with Salesforce auth context
+      console.log(`🔍 [DEBUG] Passing ${session.messages.length - 1} messages to AI service`);
       const aiResponse = await aiService.chat(
         session.messages.slice(0, -1), // Don't include the message we just added
         message,
