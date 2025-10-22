@@ -44,6 +44,7 @@ export class OpenRouterService extends BaseAIService {
       if (recordContext) {
         const contextPrefix = this.formatRecordContext(recordContext);
         enhancedUserMessage = contextPrefix + userMessage;
+        console.log(`📋 [OpenRouter] Record context included for ${recordContext.objectApiName} (${recordContext.recordId})`);
       }
 
       // Build conversation history
@@ -60,6 +61,12 @@ export class OpenRouterService extends BaseAIService {
 
       console.log(`📝 Including ${conversationMessages.length} messages in conversation (${messages.length} from history + 1 current)`);
       console.log(`Processing message with ${tools.length} available tools`);
+      console.log('📤 [OpenRouter] Message being sent to LLM:', {
+        userMessage: userMessage.substring(0, 100) + (userMessage.length > 100 ? '...' : ''),
+        enhancedMessage: enhancedUserMessage.substring(0, 200) + (enhancedUserMessage.length > 200 ? '...' : ''),
+        hasRecordContext: !!recordContext,
+        messageLength: enhancedUserMessage.length
+      });
 
       // Call OpenRouter with tools
       let response = await this.client.post('/chat/completions', {

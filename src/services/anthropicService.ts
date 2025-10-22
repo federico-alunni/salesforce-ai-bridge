@@ -32,6 +32,7 @@ export class AnthropicService extends BaseAIService {
       if (recordContext) {
         const contextPrefix = this.formatRecordContext(recordContext);
         enhancedUserMessage = contextPrefix + userMessage;
+        console.log(`📋 [Anthropic] Record context included for ${recordContext.objectApiName} (${recordContext.recordId})`);
       }
 
       // Build conversation history (Anthropic only accepts user/assistant roles)
@@ -49,6 +50,12 @@ export class AnthropicService extends BaseAIService {
       ];
 
       console.log(`[Anthropic] Processing message with ${tools.length} available tools`);
+      console.log('📤 [Anthropic] Message being sent to LLM:', {
+        userMessage: userMessage.substring(0, 100) + (userMessage.length > 100 ? '...' : ''),
+        enhancedMessage: enhancedUserMessage.substring(0, 200) + (enhancedUserMessage.length > 200 ? '...' : ''),
+        hasRecordContext: !!recordContext,
+        messageLength: enhancedUserMessage.length
+      });
 
       // Call Claude with tools
       let response = await this.client.messages.create({
