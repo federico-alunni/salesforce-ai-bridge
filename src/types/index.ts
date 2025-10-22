@@ -35,11 +35,22 @@ export interface ChatSession {
   createdAt: number;
   lastActivityAt: number;
   salesforceAuth?: SalesforceAuth;
+  recordContext?: RecordContext;
+}
+
+export interface RecordContext {
+  record: any;
+  objectApiName: string;
+  recordId: string;
 }
 
 export interface ChatRequest {
   message: string;
   sessionId?: string;
+  includeRecordContext?: boolean;
+  record?: any;
+  objectApiName?: string;
+  recordId?: string;
 }
 
 export interface ChatResponse {

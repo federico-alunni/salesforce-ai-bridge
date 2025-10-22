@@ -153,13 +153,39 @@ export function createChatRouter(
   // POST /api/chat - Send a message and get AI response
   router.post('/', async (req: Request, res: Response) => {
     try {
-      const { message, sessionId: providedSessionId } = req.body as ChatRequest;
+      const { 
+        message, 
+        sessionId: providedSessionId,
+        includeRecordContext,
+        record,
+        objectApiName,
+        recordId
+      } = req.body as ChatRequest;
 
       if (!message || typeof message !== 'string') {
         console.log('🔍 [DEBUG] Response Status Code: 400 (Invalid message)');
         return res.status(400).json({
           error: 'Message is required and must be a string',
         });
+      }
+
+      // Validate record context if includeRecordContext is true
+      let recordContext;
+      if (includeRecordContext) {
+        if (!record || !objectApiName || !recordId) {
+          console.log('🔍 [DEBUG] Response Status Code: 400 (Missing record context)');
+          return res.status(400).json({
+            error: 'When includeRecordContext is true, record, objectApiName, and recordId are required',
+          });
+        }
+        
+        recordContext = {
+          record,
+          objectApiName,
+          recordId
+        };
+        
+        console.log(`📋 Including record context: ${objectApiName} (${recordId})`);
       }
 
       // Get Salesforce auth from middleware
@@ -177,6 +203,12 @@ export function createChatRouter(
         session = sessionManager.getSession(sessionId)!;
       }
 
+      // Update session with record context if provided
+      if (recordContext) {
+        session.recordContext = recordContext;
+        sessionManager.updateSession(sessionId, session);
+      }
+
       // Add user message to session
       session.messages.push({
         role: 'user',
@@ -184,12 +216,13 @@ export function createChatRouter(
         timestamp: Date.now(),
       });
 
-      // Get AI response with Salesforce auth context
+      // Get AI response with Salesforce auth context and record context
       console.log(`🔍 [DEBUG] Passing ${session.messages.length - 1} messages to AI service`);
       const aiResponse = await aiService.chat(
         session.messages.slice(0, -1), // Don't include the message we just added
         message,
-        salesforceAuth
+        salesforceAuth,
+        recordContext
       );
 
       // Add AI response to session

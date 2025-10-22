@@ -34,10 +34,17 @@ export class OpenRouterService extends BaseAIService {
     return this.model;
   }
 
-  async chat(messages: ChatMessage[], userMessage: string, salesforceAuth?: any): Promise<string> {
+  async chat(messages: ChatMessage[], userMessage: string, salesforceAuth?: any, recordContext?: any): Promise<string> {
     try {
       // Get available tools from MCP server
       const tools = await this.getToolsForOpenRouter();
+
+      // Prepend record context to user message if provided
+      let enhancedUserMessage = userMessage;
+      if (recordContext) {
+        const contextPrefix = this.formatRecordContext(recordContext);
+        enhancedUserMessage = contextPrefix + userMessage;
+      }
 
       // Build conversation history
       const conversationMessages = [
@@ -47,7 +54,7 @@ export class OpenRouterService extends BaseAIService {
         })),
         {
           role: 'user' as const,
-          content: userMessage,
+          content: enhancedUserMessage,
         },
       ];
 

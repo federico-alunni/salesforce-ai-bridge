@@ -1,4 +1,4 @@
-import { ChatMessage, SalesforceAuth } from '../../types';
+import { ChatMessage, SalesforceAuth, RecordContext } from '../../types';
 import { MCPClientService } from '../mcpClient';
 
 /**
@@ -11,9 +11,15 @@ export interface IAIService {
    * @param messages - Conversation history
    * @param userMessage - Current user message
    * @param salesforceAuth - Optional Salesforce authentication context
+   * @param recordContext - Optional Salesforce record context
    * @returns AI response text
    */
-  chat(messages: ChatMessage[], userMessage: string, salesforceAuth?: SalesforceAuth): Promise<string>;
+  chat(
+    messages: ChatMessage[], 
+    userMessage: string, 
+    salesforceAuth?: SalesforceAuth,
+    recordContext?: RecordContext
+  ): Promise<string>;
 
   /**
    * Get the name of the AI provider
@@ -37,7 +43,12 @@ export abstract class BaseAIService implements IAIService {
     this.mcpClient = mcpClient;
   }
 
-  abstract chat(messages: ChatMessage[], userMessage: string, salesforceAuth?: SalesforceAuth): Promise<string>;
+  abstract chat(
+    messages: ChatMessage[], 
+    userMessage: string, 
+    salesforceAuth?: SalesforceAuth,
+    recordContext?: RecordContext
+  ): Promise<string>;
   abstract getProviderName(): string;
   abstract getModelName(): string;
 
@@ -113,5 +124,41 @@ Guidelines:
 - When creating or modifying records, confirm the action taken
 
 Remember: You're helping users interact with their Salesforce org, so be precise and careful with data operations.`;
+  }
+
+  /**
+   * Format Salesforce record context into LLM-friendly text
+   * @param recordContext - The record context to format
+   * @returns Formatted string to prepend to the user message
+   */
+  protected formatRecordContext(recordContext: RecordContext): string {
+    const { record, objectApiName, recordId } = recordContext;
+    
+    let contextText = `\n\n=== SALESFORCE RECORD CONTEXT ===\n`;
+    contextText += `Object Type: ${objectApiName}\n`;
+    contextText += `Record ID: ${recordId}\n`;
+    contextText += `\nRecord Fields:\n`;
+    
+    // Format the record fields in a readable way
+    for (const [fieldName, fieldValue] of Object.entries(record)) {
+      // Skip null/undefined values
+      if (fieldValue === null || fieldValue === undefined) {
+        continue;
+      }
+      
+      // Handle different field types
+      if (typeof fieldValue === 'object' && !Array.isArray(fieldValue)) {
+        // Related record or complex object
+        contextText += `  ${fieldName}: ${JSON.stringify(fieldValue)}\n`;
+      } else {
+        contextText += `  ${fieldName}: ${fieldValue}\n`;
+      }
+    }
+    
+    contextText += `=== END RECORD CONTEXT ===\n\n`;
+    contextText += `The user's question relates to the above ${objectApiName} record. `;
+    contextText += `Use this context when answering their question.\n\n`;
+    
+    return contextText;
   }
 }
