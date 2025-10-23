@@ -10,6 +10,7 @@ export interface Config {
   // Perplexity configuration
   perplexityApiKey: string;
   perplexityModel: string;
+  perplexityApiBaseUrl: string;
   // OpenRouter configuration
   openRouterApiKey: string;
   openRouterModel: string;
@@ -61,6 +62,7 @@ export function loadConfig(): Config {
   // Perplexity config
   perplexityApiKey: process.env.PERPLEXITY_API_KEY || '',
   perplexityModel: process.env.PERPLEXITY_MODEL || 'perplexity-1.0',
+      perplexityApiBaseUrl: process.env.PERPLEXITY_API_BASE_URL || 'https://api.perplexity.ai',
     // OpenRouter config
     openRouterApiKey: process.env.OPENROUTER_API_KEY || '',
     openRouterModel: process.env.OPENROUTER_MODEL || 'nousresearch/deepseek-r1t2-chimera:free',

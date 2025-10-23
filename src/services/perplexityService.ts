@@ -20,9 +20,11 @@ export class PerplexityService extends BaseAIService {
     this.model = config.perplexityModel;
 
     this.client = axios.create({
-      baseURL: 'https://www.perplexity.ai/api',
+      baseURL: config.perplexityApiBaseUrl || 'https://api.perplexity.ai',
       headers: {
         'Authorization': `Bearer ${config.perplexityApiKey}`,
+        // Some Perplexity endpoints accept x-api-key as an alternative
+        'x-api-key': config.perplexityApiKey,
         'Content-Type': 'application/json',
       },
       timeout: 60000,
@@ -58,16 +60,16 @@ export class PerplexityService extends BaseAIService {
 
       console.log(`[Perplexity] Sending message (len=${enhancedUserMessage.length}) with ${tools.length} tools available`);
 
-      // Call a generic Perplexity completions endpoint. The exact API may differ
-      // across Perplexity versions; this implementation opts for a conservative
-      // request body similar to other providers in this project.
-      let response = await this.client.post('/chat', {
+      // Use Perplexity's documented server endpoint and messages format
+      const payload = {
         model: this.model,
-        conversation,
+        messages: conversation.map((m: any) => ({ role: m.role, content: m.content })),
+        // include tools if provider supports them (mapped above)
         tools,
-        max_tokens: 4096,
         temperature: 0.7,
-      });
+      };
+
+      let response = await this.client.post('/chat/completions', payload);
 
       let iteration = 0;
       const maxIterations = 10;
@@ -75,8 +77,8 @@ export class PerplexityService extends BaseAIService {
       // Simple agentic loop: if Perplexity returns tool_calls, execute them
       while (response.data?.finish_reason === 'tool_calls' && iteration < maxIterations) {
         iteration++;
-        const message = response.data.choices?.[0]?.message || response.data.message;
-        const toolCalls = message?.tool_calls || [];
+  const message = response.data.choices?.[0]?.message || response.data.message;
+  const toolCalls = message?.tool_calls || [];
 
         if (!toolCalls || toolCalls.length === 0) break;
 
@@ -112,17 +114,27 @@ export class PerplexityService extends BaseAIService {
         return 'I apologize, but I reached the maximum number of steps while processing your request. Please try simplifying your request.';
       }
 
-      const finalText = response.data?.choices?.[0]?.message?.content || response.data?.message?.content || response.data?.text;
-      return finalText || 'I processed your request but had no response to provide.';
+  // Perplexity returns assistant content at choices[0].message.content
+  const finalText = response.data?.choices?.[0]?.message?.content || response.data?.choices?.[0]?.content || response.data?.message?.content || response.data?.text;
+  return finalText || 'I processed your request but had no response to provide.';
     } catch (error: any) {
       console.error('[Perplexity] Error:', error.response?.data || error.message);
 
-      if (error.response?.status === 401) {
-        throw new Error('Invalid Perplexity API key. Please check your PERPLEXITY_API_KEY environment variable.');
+      const status = error.response?.status;
+      if (status === 401) {
+        throw new Error('Invalid Perplexity API key (401). Please check your PERPLEXITY_API_KEY environment variable.');
       }
 
-      if (error.response?.status === 429) {
-        throw new Error('Rate limit exceeded. Please try again in a moment.');
+      if (status === 403) {
+        // 403 can mean the key is not authorized for the endpoint or plan restrictions
+        const body = error.response?.data;
+        let details = '';
+        try { details = JSON.stringify(body); } catch(e) { details = String(body); }
+        throw new Error(`Perplexity API access denied (403). Response: ${details}`);
+      }
+
+      if (status === 429) {
+        throw new Error('Rate limit exceeded (429). Please try again in a moment.');
       }
 
       throw new Error(`Perplexity API error: ${error.message}`);
