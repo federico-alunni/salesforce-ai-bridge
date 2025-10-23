@@ -3,6 +3,7 @@ import { MCPClientService } from './mcpClient.js';
 import { IAIService } from './base/AIServiceBase.js';
 import { AnthropicService } from './anthropicService.js';
 import { OpenRouterService } from './openRouterService.js';
+import { PerplexityService } from './perplexityService.js';
 
 /**
  * Factory to create AI service instances based on configuration
@@ -24,6 +25,9 @@ export class AIServiceFactory {
       
       case 'openrouter':
         return new OpenRouterService(config, mcpClient);
+
+      case 'perplexity':
+        return new PerplexityService(config, mcpClient);
       
       default:
         // This should never happen due to config validation,

@@ -1,4 +1,4 @@
-export type AIProvider = 'anthropic' | 'openrouter';
+export type AIProvider = 'anthropic' | 'openrouter' | 'perplexity';
 
 export interface Config {
   port: number;
@@ -7,6 +7,9 @@ export interface Config {
   // Anthropic configuration
   anthropicApiKey: string;
   anthropicModel: string;
+  // Perplexity configuration
+  perplexityApiKey: string;
+  perplexityModel: string;
   // OpenRouter configuration
   openRouterApiKey: string;
   openRouterModel: string;
@@ -26,8 +29,8 @@ export function loadConfig(): Config {
   const aiProvider = (process.env.AI_PROVIDER || 'openrouter') as AIProvider;
   
   // Validate AI provider selection
-  if (!['anthropic', 'openrouter'].includes(aiProvider)) {
-    throw new Error('AI_PROVIDER must be either "anthropic" or "openrouter"');
+  if (!['anthropic', 'openrouter', 'perplexity'].includes(aiProvider)) {
+    throw new Error('AI_PROVIDER must be one of "anthropic", "openrouter", or "perplexity"');
   }
 
   // Check required API key based on provider
@@ -37,6 +40,10 @@ export function loadConfig(): Config {
   
   if (aiProvider === 'openrouter' && !process.env.OPENROUTER_API_KEY) {
     throw new Error('OPENROUTER_API_KEY is required when AI_PROVIDER=openrouter');
+  }
+  
+  if (aiProvider === 'perplexity' && !process.env.PERPLEXITY_API_KEY) {
+    throw new Error('PERPLEXITY_API_KEY is required when AI_PROVIDER=perplexity');
   }
 
   // Validate MCP server URL
@@ -51,6 +58,9 @@ export function loadConfig(): Config {
     // Anthropic config
     anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
     anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+  // Perplexity config
+  perplexityApiKey: process.env.PERPLEXITY_API_KEY || '',
+  perplexityModel: process.env.PERPLEXITY_MODEL || 'perplexity-1.0',
     // OpenRouter config
     openRouterApiKey: process.env.OPENROUTER_API_KEY || '',
     openRouterModel: process.env.OPENROUTER_MODEL || 'nousresearch/deepseek-r1t2-chimera:free',

@@ -1,0 +1,142 @@
+import axios, { AxiosInstance } from 'axios';
+import { Config } from '../config/config.js';
+import { MCPClientService } from './mcpClient.js';
+import { ChatMessage } from '../types/index.js';
+import { BaseAIService } from './base/AIServiceBase.js';
+
+/**
+ * Minimal Perplexity integration.
+ * This implementation uses Perplexity's HTTP API to send a conversation and
+ * handle simple tool calling behavior by mapping MCP tools into a function-like
+ * schema. The Perplexity API surface can vary; this implementation aims to be
+ * consistent with the project's agentic loop used for OpenRouter.
+ */
+export class PerplexityService extends BaseAIService {
+  private client: AxiosInstance;
+  private model: string;
+
+  constructor(config: Config, mcpClient: MCPClientService) {
+    super(mcpClient);
+    this.model = config.perplexityModel;
+
+    this.client = axios.create({
+      baseURL: 'https://www.perplexity.ai/api',
+      headers: {
+        'Authorization': `Bearer ${config.perplexityApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 60000,
+    });
+  }
+
+  getProviderName(): string {
+    return 'Perplexity';
+  }
+
+  getModelName(): string {
+    return this.model;
+  }
+
+  async chat(messages: ChatMessage[], userMessage: string, salesforceAuth?: any, recordContext?: any): Promise<string> {
+    try {
+      const tools = await this.getToolsForPerplexity();
+
+      let enhancedUserMessage = userMessage;
+      if (recordContext) {
+        enhancedUserMessage = this.formatRecordContext(recordContext) + userMessage;
+        console.log(`📋 [Perplexity] Record context included for ${recordContext.objectApiName} (${recordContext.recordId})`);
+      }
+
+      const conversation = [
+        {
+          role: 'system',
+          content: this.getSystemPrompt(),
+        },
+        ...messages.map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: enhancedUserMessage },
+      ];
+
+      console.log(`[Perplexity] Sending message (len=${enhancedUserMessage.length}) with ${tools.length} tools available`);
+
+      // Call a generic Perplexity completions endpoint. The exact API may differ
+      // across Perplexity versions; this implementation opts for a conservative
+      // request body similar to other providers in this project.
+      let response = await this.client.post('/chat', {
+        model: this.model,
+        conversation,
+        tools,
+        max_tokens: 4096,
+        temperature: 0.7,
+      });
+
+      let iteration = 0;
+      const maxIterations = 10;
+
+      // Simple agentic loop: if Perplexity returns tool_calls, execute them
+      while (response.data?.finish_reason === 'tool_calls' && iteration < maxIterations) {
+        iteration++;
+        const message = response.data.choices?.[0]?.message || response.data.message;
+        const toolCalls = message?.tool_calls || [];
+
+        if (!toolCalls || toolCalls.length === 0) break;
+
+        console.log(`[Perplexity] Iteration ${iteration}: processing ${toolCalls.length} tool calls`);
+
+        // Append assistant message to conversation
+        conversation.push({ role: 'assistant', content: message.content || '' });
+
+        for (const call of toolCalls) {
+          const toolName = call.name;
+          let toolArgs = {};
+          try {
+            toolArgs = call.arguments ? JSON.parse(call.arguments) : {};
+          } catch (e) {
+            toolArgs = {};
+          }
+
+          const toolResult = await this.executeTool(toolName, toolArgs, salesforceAuth);
+
+          conversation.push({ role: 'tool', content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult) } as any);
+        }
+
+        response = await this.client.post('/chat', {
+          model: this.model,
+          conversation,
+          tools,
+          max_tokens: 4096,
+          temperature: 0.7,
+        });
+      }
+
+      if (iteration >= maxIterations) {
+        return 'I apologize, but I reached the maximum number of steps while processing your request. Please try simplifying your request.';
+      }
+
+      const finalText = response.data?.choices?.[0]?.message?.content || response.data?.message?.content || response.data?.text;
+      return finalText || 'I processed your request but had no response to provide.';
+    } catch (error: any) {
+      console.error('[Perplexity] Error:', error.response?.data || error.message);
+
+      if (error.response?.status === 401) {
+        throw new Error('Invalid Perplexity API key. Please check your PERPLEXITY_API_KEY environment variable.');
+      }
+
+      if (error.response?.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again in a moment.');
+      }
+
+      throw new Error(`Perplexity API error: ${error.message}`);
+    }
+  }
+
+  private async getToolsForPerplexity(): Promise<any[]> {
+    const mcpTools = await this.mcpClient.listTools();
+
+    // Map tools into a function-like schema expected by this service
+    return mcpTools.map((tool: any) => ({
+      name: tool.name,
+      description: tool.description || '',
+      parameters: tool.inputSchema || { type: 'object', properties: {} },
+    }));
+  }
+}
