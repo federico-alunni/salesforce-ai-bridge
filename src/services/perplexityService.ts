@@ -64,10 +64,22 @@ export class PerplexityService extends BaseAIService {
       const payload = {
         model: this.model,
         messages: conversation.map((m: any) => ({ role: m.role, content: m.content })),
-        // include tools if provider supports them (mapped above)
+        // include tools (Perplexity expects a function-like schema)
         tools,
         temperature: 0.7,
       };
+
+      // Log a redacted preview of the payload (no API keys)
+      try {
+        const preview = {
+          model: payload.model,
+          messages: payload.messages.slice(-3), // last few messages
+          tools: payload.tools ? payload.tools.map((t: any) => ({ name: t.function?.name || t.name || '<unknown>', description: t.function?.description || t.description || '' })) : [],
+        };
+        console.log('[Perplexity] Request payload preview:', JSON.stringify(preview));
+      } catch (e) {
+        // ignore logging errors
+      }
 
       let response = await this.client.post('/chat/completions', payload);
 
@@ -144,11 +156,19 @@ export class PerplexityService extends BaseAIService {
   private async getToolsForPerplexity(): Promise<any[]> {
     const mcpTools = await this.mcpClient.listTools();
 
-    // Map tools into a function-like schema expected by this service
+    // Map tools into the function schema Perplexity expects:
+    // { type: 'function', function: { name, description, parameters } }
     return mcpTools.map((tool: any) => ({
-      name: tool.name,
-      description: tool.description || '',
-      parameters: tool.inputSchema || { type: 'object', properties: {} },
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description || '',
+        parameters: tool.inputSchema || {
+          type: 'object',
+          properties: {},
+          required: [],
+        },
+      },
     }));
   }
 }
