@@ -66,6 +66,8 @@ export class PerplexityService extends BaseAIService {
         messages: conversation.map((m: any) => ({ role: m.role, content: m.content })),
         // include tools (Perplexity expects a function-like schema)
         tools,
+        // ask Perplexity to automatically decide when to call tools
+        tool_choice: 'auto',
         temperature: 0.7,
       };
 
@@ -113,13 +115,16 @@ export class PerplexityService extends BaseAIService {
           conversation.push({ role: 'tool', content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult) } as any);
         }
 
-        response = await this.client.post('/chat', {
+        // Continue using the completions endpoint so Perplexity can continue tool-driven turns
+        const followUpPayload = {
           model: this.model,
-          conversation,
+          messages: conversation.map((m: any) => ({ role: m.role, content: m.content })),
           tools,
-          max_tokens: 4096,
+          tool_choice: 'auto',
           temperature: 0.7,
-        });
+        };
+
+        response = await this.client.post('/chat/completions', followUpPayload);
       }
 
       if (iteration >= maxIterations) {
