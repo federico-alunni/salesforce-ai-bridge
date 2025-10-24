@@ -64,10 +64,11 @@ export class PerplexityService extends BaseAIService {
       const payload = {
         model: this.model,
         messages: conversation.map((m: any) => ({ role: m.role, content: m.content })),
-        // include tools (Perplexity expects a function-like schema)
-        tools,
-        // ask Perplexity to automatically decide when to call tools
-        tool_choice: 'auto',
+        // Perplexity expects the functions under the `function` key and
+        // the auto-invoke flag named `function_call` (not `tools`/`tool_choice`).
+        function: tools,
+        // ask Perplexity to automatically decide when to call functions
+        function_call: 'auto',
         temperature: 0.7,
       };
 
@@ -76,7 +77,7 @@ export class PerplexityService extends BaseAIService {
         const preview = {
           model: payload.model,
           messages: payload.messages.slice(-3), // last few messages
-          tools: payload.tools ? payload.tools.map((t: any) => ({ name: t.function?.name || t.name || '<unknown>', description: t.function?.description || t.description || '' })) : [],
+          functions: payload.function ? payload.function.map((t: any) => ({ name: t.function?.name || t.name || '<unknown>', description: t.function?.description || t.description || '' })) : [],
         };
         console.log('[Perplexity] Request payload preview:', JSON.stringify(preview));
       } catch (e) {
@@ -89,12 +90,33 @@ export class PerplexityService extends BaseAIService {
       const maxIterations = 10;
 
       // Simple agentic loop: if Perplexity returns tool_calls, execute them
-      while (response.data?.finish_reason === 'tool_calls' && iteration < maxIterations) {
+      // Perplexity may indicate tool calls via finish_reason or by returning
+      // structured tool_calls in different fields. Be tolerant and look in
+      // several places.
+      while (iteration < maxIterations) {
         iteration++;
-  const message = response.data.choices?.[0]?.message || response.data.message;
-  const toolCalls = message?.tool_calls || [];
+  const message = response.data?.choices?.[0]?.message || response.data?.message || response.data?.choices?.[0];
 
-        if (!toolCalls || toolCalls.length === 0) break;
+  // Try to find structured tool_calls first
+  let toolCalls = message?.tool_calls || message?.toolCalls || [];
+
+  // If none found, attempt to parse a JSON block that represents a tool call
+  if ((!toolCalls || toolCalls.length === 0) && typeof message?.content === 'string') {
+    // look for a JSON object that contains name and arguments
+    const jsonMatch = message.content.match(/\{\s*"name"\s*:\s*"[^"]+"[\s\S]*\}/m);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        // support single call or an array
+        if (Array.isArray(parsed)) toolCalls = parsed;
+        else toolCalls = [parsed];
+      } catch (e) {
+        // ignore parse errors
+      }
+    }
+  }
+
+  if (!toolCalls || toolCalls.length === 0) break;
 
         console.log(`[Perplexity] Iteration ${iteration}: processing ${toolCalls.length} tool calls`);
 
@@ -102,10 +124,16 @@ export class PerplexityService extends BaseAIService {
         conversation.push({ role: 'assistant', content: message.content || '' });
 
         for (const call of toolCalls) {
-          const toolName = call.name;
+          const toolName = call.name || call.function?.name;
           let toolArgs = {};
           try {
-            toolArgs = call.arguments ? JSON.parse(call.arguments) : {};
+            if (typeof call.arguments === 'string') {
+              toolArgs = call.arguments ? JSON.parse(call.arguments) : {};
+            } else if (call.arguments && typeof call.arguments === 'object') {
+              toolArgs = call.arguments;
+            } else if (call.function && call.function.arguments) {
+              toolArgs = call.function.arguments;
+            }
           } catch (e) {
             toolArgs = {};
           }
@@ -119,8 +147,8 @@ export class PerplexityService extends BaseAIService {
         const followUpPayload = {
           model: this.model,
           messages: conversation.map((m: any) => ({ role: m.role, content: m.content })),
-          tools,
-          tool_choice: 'auto',
+          function: tools,
+          function_call: 'auto',
           temperature: 0.7,
         };
 
@@ -163,7 +191,11 @@ export class PerplexityService extends BaseAIService {
 
     // Map tools into the function schema Perplexity expects:
     // { type: 'function', function: { name, description, parameters } }
+    // Also include top-level `name` and `description` which some API variants
+    // expect to be present alongside the `function` object.
     return mcpTools.map((tool: any) => ({
+      name: tool.name,
+      description: tool.description || '',
       type: 'function',
       function: {
         name: tool.name,
