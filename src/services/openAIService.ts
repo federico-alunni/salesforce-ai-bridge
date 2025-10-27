@@ -69,23 +69,8 @@ export class OpenAIService extends BaseAIService {
         max_output_tokens: 500,
       };
 
-      // Log a redacted preview of the payload (avoid logging secrets)
-      try {
-        const preview = {
-          model: payload.model,
-          input: payload.input.slice(-3), // show last few input items
-          tools: payload.tools
-            ? payload.tools.map((t: any) => ({
-                name: t.function?.name || t.name || '<unknown>',
-                description: t.function?.description || t.description || '',
-                parameters: t.function?.parameters || t.parameters || {},
-              }))
-            : [],
-        };
-        console.log('📦 [OpenAI] Request payload preview:', JSON.stringify(preview));
-      } catch (e) {
-        // ignore logging errors
-      }
+      // Log a redacted preview of the payload (avoid logging secrets) but log everything else.
+    console.log('📦 [OpenAI] Request payload preview:', JSON.stringify(payload));
 
       // Send initial request to Responses API
       let response = await this.client.post('/responses', payload);
@@ -215,8 +200,8 @@ export class OpenAIService extends BaseAIService {
 
     // Map to expected format and include a 'type' === 'function' param per tool
     return mcpTools.map((tool: any) => ({
-      type: 'function',
       function: {
+		type: 'function',
         name: tool.name,
         description: tool.description || '',
         parameters: tool.inputSchema || {
