@@ -70,7 +70,7 @@ export class OpenAIService extends BaseAIService {
       };
 
       // Log a redacted preview of the payload (avoid logging secrets) but log everything else.
-    console.log('📦 [OpenAI] Request payload preview:', JSON.stringify(payload));
+      console.log('📦 [OpenAI] Request payload preview:', JSON.stringify(payload));
 
       // Send initial request to Responses API
       let response = await this.client.post('/responses', payload);
