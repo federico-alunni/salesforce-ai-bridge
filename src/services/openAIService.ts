@@ -64,7 +64,7 @@ export class OpenAIService extends BaseAIService {
         model: this.model,
         instructions: this.getSystemPrompt(),
         input: conversationInputs,
-        functions: tools,
+        tools: tools,
         temperature: 1,
         max_output_tokens: 500,
       };
