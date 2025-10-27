@@ -68,8 +68,8 @@ export class OpenRouterService extends BaseAIService {
         messageLength: enhancedUserMessage.length
       });
 
-      // Call OpenRouter with tools
-      let response = await this.client.post('/chat/completions', {
+      // Build payload and log a redacted preview similar to PerplexityService
+      const payload = {
         model: this.model,
         messages: [
           {
@@ -82,7 +82,24 @@ export class OpenRouterService extends BaseAIService {
         tool_choice: 'auto',
         temperature: 0.7,
         max_tokens: 4096,
-      });
+      };
+
+      // Log a redacted preview of the payload (avoid logging secrets)
+      try {
+        const preview = {
+          model: payload.model,
+          messages: payload.messages.slice(-3), // show last few messages
+          tools: payload.tools
+            ? payload.tools.map((t: any) => ({ name: t.function?.name || t.name || '<unknown>', description: t.function?.description || t.description || '' }))
+            : [],
+        };
+        console.log('📦 [OpenRouter] Request payload preview:', JSON.stringify(preview));
+      } catch (e) {
+        // ignore logging errors
+      }
+
+      // Call OpenRouter with tools
+      let response = await this.client.post('/chat/completions', payload);
 
       console.log('OpenRouter initial response:', {
         model: response.data.model,

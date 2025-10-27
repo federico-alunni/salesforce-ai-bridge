@@ -187,16 +187,11 @@ export class PerplexityService extends BaseAIService {
     }
   }
 
+
   private async getToolsForPerplexity(): Promise<any[]> {
     const mcpTools = await this.mcpClient.listTools();
 
-    // Map tools into the function schema Perplexity expects:
-    // { type: 'function', function: { name, description, parameters } }
-    // Also include top-level `name` and `description` which some API variants
-    // expect to be present alongside the `function` object.
     return mcpTools.map((tool: any) => ({
-      name: tool.name,
-      description: tool.description || '',
       type: 'function',
       function: {
         name: tool.name,
