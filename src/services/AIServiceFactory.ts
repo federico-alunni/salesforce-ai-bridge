@@ -4,6 +4,7 @@ import { IAIService } from './base/AIServiceBase.js';
 import { AnthropicService } from './anthropicService.js';
 import { OpenRouterService } from './openRouterService.js';
 import { PerplexityService } from './perplexityService.js';
+import { OpenAIService } from './openAIService.js';
 
 /**
  * Factory to create AI service instances based on configuration
@@ -25,6 +26,9 @@ export class AIServiceFactory {
       
       case 'openrouter':
         return new OpenRouterService(config, mcpClient);
+
+      case 'openai':
+        return new OpenAIService(config, mcpClient);
 
       case 'perplexity':
         return new PerplexityService(config, mcpClient);

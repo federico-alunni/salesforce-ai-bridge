@@ -1,4 +1,4 @@
-export type AIProvider = 'anthropic' | 'openrouter' | 'perplexity';
+export type AIProvider = 'anthropic' | 'openrouter' | 'perplexity' | 'openai';
 
 export interface Config {
   port: number;
@@ -16,6 +16,9 @@ export interface Config {
   openRouterModel: string;
   openRouterAppName: string;
   openRouterSiteUrl: string;
+  // OpenAI configuration
+  openaiApiKey: string;
+  openaiModel: string;
   // MCP configuration
   mcpServerUrl: string;
   allowedOrigins: string[];
@@ -30,8 +33,8 @@ export function loadConfig(): Config {
   const aiProvider = (process.env.AI_PROVIDER || 'openrouter') as AIProvider;
   
   // Validate AI provider selection
-  if (!['anthropic', 'openrouter', 'perplexity'].includes(aiProvider)) {
-    throw new Error('AI_PROVIDER must be one of "anthropic", "openrouter", or "perplexity"');
+  if (!['anthropic', 'openrouter', 'perplexity', 'openai'].includes(aiProvider)) {
+    throw new Error('AI_PROVIDER must be one of "anthropic", "openrouter", "perplexity", or "openai"');
   }
 
   // Check required API key based on provider
@@ -45,6 +48,10 @@ export function loadConfig(): Config {
   
   if (aiProvider === 'perplexity' && !process.env.PERPLEXITY_API_KEY) {
     throw new Error('PERPLEXITY_API_KEY is required when AI_PROVIDER=perplexity');
+  }
+
+  if (aiProvider === 'openai' && !process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is required when AI_PROVIDER=openai');
   }
 
   // Validate MCP server URL
@@ -63,11 +70,14 @@ export function loadConfig(): Config {
   perplexityApiKey: process.env.PERPLEXITY_API_KEY || '',
   perplexityModel: process.env.PERPLEXITY_MODEL || 'perplexity-1.0',
       perplexityApiBaseUrl: process.env.PERPLEXITY_API_BASE_URL || 'https://api.perplexity.ai',
-    // OpenRouter config
-    openRouterApiKey: process.env.OPENROUTER_API_KEY || '',
-    openRouterModel: process.env.OPENROUTER_MODEL || 'nousresearch/deepseek-r1t2-chimera:free',
-    openRouterAppName: process.env.OPENROUTER_APP_NAME || 'Salesforce-AI-Bridge',
-    openRouterSiteUrl: process.env.OPENROUTER_SITE_URL || 'http://localhost:3001',
+  // OpenRouter config
+  openRouterApiKey: process.env.OPENROUTER_API_KEY || '',
+  openRouterModel: process.env.OPENROUTER_MODEL || 'nousresearch/deepseek-r1t2-chimera:free',
+  openRouterAppName: process.env.OPENROUTER_APP_NAME || 'Salesforce-AI-Bridge',
+  openRouterSiteUrl: process.env.OPENROUTER_SITE_URL || 'http://localhost:3001',
+  // OpenAI config
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
+  openaiModel: process.env.OPENAI_MODEL || 'gpt-5-mini',
     // MCP config
     mcpServerUrl: process.env.MCP_SERVER_URL,
     allowedOrigins: process.env.ALLOWED_ORIGINS?.split(',') || ['*'],
