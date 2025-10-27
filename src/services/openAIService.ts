@@ -64,7 +64,7 @@ export class OpenAIService extends BaseAIService {
         model: this.model,
         instructions: this.getSystemPrompt(),
         input: conversationInputs,
-        tools,
+        functions: tools,
         temperature: 1,
         max_output_tokens: 500,
       };
@@ -200,15 +200,13 @@ export class OpenAIService extends BaseAIService {
 
     // Map to expected format and include a 'type' === 'function' param per tool
     return mcpTools.map((tool: any) => ({
-      function: {
-		type: 'function',
-        name: tool.name,
-        description: tool.description || '',
-        parameters: tool.inputSchema || {
-          type: 'object',
-          properties: {},
-          required: [],
-        },
+      type: 'function',
+      name: tool.name,
+      description: tool.description || '',
+      parameters: tool.inputSchema || {
+        type: 'object',
+        properties: {},
+        required: [],
       },
     }));
   }
