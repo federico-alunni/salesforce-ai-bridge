@@ -90,7 +90,11 @@ export class OpenRouterService extends BaseAIService {
           model: payload.model,
           messages: payload.messages.slice(-3), // show last few messages
           tools: payload.tools
-            ? payload.tools.map((t: any) => ({ name: t.function?.name || t.name || '<unknown>', description: t.function?.description || t.description || '' }))
+            ? payload.tools.map((t: any) => ({
+                name: t.function?.name || t.name || '<unknown>',
+                description: t.function?.description || t.description || '',
+                parameters: t.function?.parameters || t.parameters || {},
+              }))
             : [],
         };
         console.log('📦 [OpenRouter] Request payload preview:', JSON.stringify(preview));

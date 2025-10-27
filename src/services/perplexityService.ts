@@ -77,7 +77,13 @@ export class PerplexityService extends BaseAIService {
         const preview = {
           model: payload.model,
           messages: payload.messages.slice(-3), // last few messages
-          functions: payload.function ? payload.function.map((t: any) => ({ name: t.function?.name || t.name || '<unknown>', description: t.function?.description || t.description || '' })) : [],
+          functions: payload.function
+            ? payload.function.map((t: any) => ({
+                name: t.function?.name || t.name || '<unknown>',
+                description: t.function?.description || t.description || '',
+                parameters: t.function?.parameters || t.parameters || {},
+              }))
+            : [],
         };
         console.log('[Perplexity] Request payload preview:', JSON.stringify(preview));
       } catch (e) {
