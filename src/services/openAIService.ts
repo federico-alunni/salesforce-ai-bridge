@@ -53,6 +53,12 @@ export class OpenAIService extends BaseAIService {
       ];
 
       console.log(`📝 [OpenAI] Sending ${conversationInputs.length} input items`);
+      console.log('📤 [OpenAI] Message being sent to Responses API:', {
+        userMessage: userMessage.substring(0, 100) + (userMessage.length > 100 ? '...' : ''),
+        enhancedMessage: enhancedUserMessage.substring(0, 200) + (enhancedUserMessage.length > 200 ? '...' : ''),
+        hasRecordContext: !!recordContext,
+        messageLength: enhancedUserMessage.length,
+      });
 
       const payload: any = {
         model: this.model,
@@ -63,8 +69,33 @@ export class OpenAIService extends BaseAIService {
         max_output_tokens: 500,
       };
 
+      // Log a redacted preview of the payload (avoid logging secrets)
+      try {
+        const preview = {
+          model: payload.model,
+          input: payload.input.slice(-3), // show last few input items
+          tools: payload.tools
+            ? payload.tools.map((t: any) => ({
+                name: t.function?.name || t.name || '<unknown>',
+                description: t.function?.description || t.description || '',
+                parameters: t.function?.parameters || t.parameters || {},
+              }))
+            : [],
+        };
+        console.log('📦 [OpenAI] Request payload preview:', JSON.stringify(preview));
+      } catch (e) {
+        // ignore logging errors
+      }
+
       // Send initial request to Responses API
       let response = await this.client.post('/responses', payload);
+
+      console.log('OpenAI initial response:', {
+        model: response.data.model,
+        status: response.data.status,
+        outputs: Array.isArray(response.data.output) ? response.data.output.length : undefined,
+        parallel_tool_calls: response.data.parallel_tool_calls,
+      });
 
       let iteration = 0;
       const maxIterations = 10;
@@ -81,7 +112,7 @@ export class OpenAIService extends BaseAIService {
           break; // no tool calls requested
         }
 
-        console.log(`Iteration ${iteration}: OpenAI requested ${functionCalls.length} tool calls`);
+  console.log(`Iteration ${iteration}: OpenAI requested ${functionCalls.length} tool calls`);
 
         // Append tool call placeholders to conversation inputs and execute tools
         for (const fc of functionCalls) {
@@ -106,14 +137,38 @@ export class OpenAIService extends BaseAIService {
         }
 
         // Continue the conversation by calling the Responses API with updated inputs
-        response = await this.client.post('/responses', {
-          model: this.model,
-          instructions: this.getSystemPrompt(),
-          input: conversationInputs,
-          tools,
-          temperature: 1,
-          max_output_tokens: 500,
-        });
+        try {
+          const continuePayload = {
+            model: this.model,
+            instructions: this.getSystemPrompt(),
+            input: conversationInputs,
+            tools,
+            temperature: 1,
+            max_output_tokens: 500,
+          };
+
+          // Log a small preview of the continue payload
+          try {
+            const preview = {
+              model: continuePayload.model,
+              input: continuePayload.input.slice(-3),
+            };
+            console.log(`📦 [OpenAI] Continue payload preview (iteration ${iteration}):`, JSON.stringify(preview));
+          } catch (e) {
+            // ignore logging errors
+          }
+
+          response = await this.client.post('/responses', continuePayload);
+
+          console.log(`Iteration ${iteration} response:`, {
+            status: response.data.status,
+            outputs: Array.isArray(response.data.output) ? response.data.output.length : undefined,
+            parallel_tool_calls: response.data.parallel_tool_calls,
+          });
+        } catch (err) {
+          console.error(`Error while continuing conversation at iteration ${iteration}:`, err);
+          throw err;
+        }
       }
 
       if (iteration >= maxIterations) {
