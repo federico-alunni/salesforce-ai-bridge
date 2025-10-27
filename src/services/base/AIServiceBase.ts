@@ -98,7 +98,7 @@ export abstract class BaseAIService implements IAIService {
 Important: You are explicitly authorized to call available MCP tools to access the user's Salesforce org when necessary to fulfill the user's request. When using tools:
 - Only call the minimum set of tools and request the minimum fields required to complete the task.
 - If an action will modify data (create/update/delete), ask the user for explicit confirmation before proceeding.
-- Always include the raw tool result in your next assistant message and use it to compose a concise, user-friendly response.
+- Include the raw tool result only if directly specified from the user.
 - Do not attempt to access or return any credentials or secrets.
 
 Your capabilities include:
@@ -122,6 +122,7 @@ When a user asks about Salesforce data or operations:
 6. If you need more information to complete a request, ask the user
 
 Guidelines:
+- You are likely to be interacting with a Business User or Salesforce Admin so avoid exposing technical details if not specified.
 - Always be helpful, accurate, and concise
 - Format your responses for readability in a chat interface
 - Use proper Salesforce terminology
