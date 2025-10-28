@@ -44,19 +44,16 @@ export class OpenAIService extends BaseAIService {
       if (recordContext) {
         const contextPrefix = this.formatRecordContext(recordContext);
         enhancedUserMessage = contextPrefix + userMessage;
-          // Keep user message unchanged; record context will be placed into
-          // the `instructions` (system prompt) so the model sees it as context
-          // rather than part of the user's message.
-          let enhancedUserMessage = userMessage;
-          let recordContextText = '';
-          if (recordContext) {
-            recordContextText = this.formatRecordContext(recordContext);
-            console.log(`📋 [OpenAI] Record context prepared for ${recordContext.objectApiName} (${recordContext.recordId})`);
+        console.log(`[OpenAI] Record context included for ${recordContext.objectApiName} (${recordContext.recordId})`);
+      }
+
+      const conversationInputs = [
+        ...messages.map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: enhancedUserMessage },
       ];
 
-      console.log(`📝 [OpenAI] Sending ${conversationInputs.length} input items`);
-      console.log('📤 [OpenAI] Message being sent to Responses API:', {
+      console.log(`[OpenAI] Sending ${conversationInputs.length} input items`);
+      console.log(`[OpenAI] Message being sent to Responses API:`, {
         userMessage: userMessage.substring(0, 100) + (userMessage.length > 100 ? '...' : ''),
         enhancedMessage: enhancedUserMessage.substring(0, 200) + (enhancedUserMessage.length > 200 ? '...' : ''),
         hasRecordContext: !!recordContext,
@@ -89,13 +86,9 @@ export class OpenAIService extends BaseAIService {
           model: this.model,
           instructions,
           input: conversationInputs,
-          // If we have Salesforce record context, include it in the instructions
-          if (recordContextText) {
-            instructions += `\n\n=== RECORD CONTEXT ===\n${recordContextText}=== END RECORD CONTEXT ===\n`;
-          }
           tools: tools,
           temperature: 1,
-          max_output_tokens: 8096,
+          max_output_tokens: 8096
         };
 
       // Log a redacted preview of the payload (avoid logging secrets) but log everything else.
