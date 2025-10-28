@@ -160,23 +160,82 @@ export class OpenAIService extends BaseAIService {
         return 'I apologize, but I reached the maximum number of steps while processing your request. Please try simplifying your request or breaking it into smaller parts.';
       }
 
-      // Extract final textual output. Look for message/text-like outputs first.
+      // Extract final textual output. The Responses API can place text in several
+      // different shapes (message objects with nested content arrays, top-level
+      // `text`, or reasoning/summary fields). Try multiple strategies and fall
+      // back to a helpful aggregation of tool results if nothing else is found.
       const finalOutputs = response.data.output || [];
-      // Prefer items that look like assistant text
-      const textOutput = finalOutputs.find((o: any) => o.type === 'message' || o.type === 'text' || o.type === 'final');
-      if (textOutput) {
-        if (textOutput.content) return textOutput.content;
-        if (textOutput.text) return textOutput.text;
+
+      // Helper to extract text from an output item
+      const extractFromOutputItem = (item: any): string | null => {
+        if (!item) return null;
+
+        // Common simple shapes
+        if (typeof item === 'string') return item;
+        if (item.text && typeof item.text === 'string') return item.text;
+        if (item.content && typeof item.content === 'string') return item.content;
+
+        // If content is an array, look for text-like parts
+        if (Array.isArray(item.content)) {
+          for (const part of item.content) {
+            if (!part) continue;
+            if (typeof part === 'string') return part;
+            if (part.text && typeof part.text === 'string') return part.text;
+            if (part.content && typeof part.content === 'string') return part.content;
+            // Some parts may be nested objects (e.g., {type: 'text', text: '...'})
+            if (part.type === 'text' && part.text) return part.text;
+          }
+        }
+
+        // Some responses include a 'summary' array (reasoning) with text elements
+        if (Array.isArray(item.summary)) {
+          const texts: string[] = [];
+          for (const s of item.summary) {
+            if (s && typeof s === 'string') texts.push(s);
+            else if (s && s.text) texts.push(s.text);
+          }
+          if (texts.length) return texts.join('\n');
+        }
+
+        return null;
+      };
+
+      // Try to find a direct message/text/final item with content
+      for (const outItem of finalOutputs) {
+        const txt = extractFromOutputItem(outItem);
+        if (txt) {
+          console.log('📥 [OpenAI] Extracted final text from output item:', txt.substring(0, 300));
+          return txt;
+        }
       }
 
-      // Fallback: if there's a top-level 'text' or 'reasoning' summary
+      // If there's a top-level text field, use it
       if (response.data.text && typeof response.data.text === 'string') {
+        console.log('📥 [OpenAI] Extracted top-level text from response.data.text');
         return response.data.text;
       }
 
-      // As last resort, try serialized output
+      // If no text found, but there are tool results appended to conversationInputs,
+      // summarize the most recent tool outputs (these were added as role: 'tool')
       try {
-        return JSON.stringify(finalOutputs.slice(-1)[0]) || 'I processed your request but had no response to provide.';
+        const recentToolResults = conversationInputs
+          .filter((i: any) => i.role === 'tool')
+          .slice(-3)
+          .map((t: any) => (typeof t.content === 'string' ? t.content : JSON.stringify(t.content)));
+
+        if (recentToolResults.length > 0) {
+          const aggregated = `Tool results:\n${recentToolResults.join('\n---\n')}`;
+          console.log('📥 [OpenAI] No direct text in response; returning aggregated tool results');
+          return aggregated;
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // As last resort, return a serialized form of the outputs for debugging
+      console.warn('⚠️ [OpenAI] No textual output found in response; returning serialized outputs for debugging');
+      try {
+        return JSON.stringify(finalOutputs) || 'I processed your request but had no response to provide.';
       } catch (e) {
         return 'I processed your request but had no response to provide.';
       }
