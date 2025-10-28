@@ -66,7 +66,7 @@ export class OpenAIService extends BaseAIService {
         input: conversationInputs,
         tools: tools,
         temperature: 1,
-        max_output_tokens: 1000,
+        max_output_tokens: 8096,
       };
 
       // Log a redacted preview of the payload (avoid logging secrets) but log everything else.
@@ -118,9 +118,13 @@ export class OpenAIService extends BaseAIService {
           // correlate results with the original function call.
           const callId = fc.call_id || fc.id || '';
           const toolContent = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+          // Use the Responses API documented shape for tool outputs
+          // See: { type: 'function_call_output', call_id: '<id>', output: '<string>' }
           conversationInputs.push({
-            role: 'assistant',
-            content: `[[TOOL_RESULT name=${toolName} id=${callId}]]\n${toolContent}`,
+            type: 'function_call_output',
+            call_id: callId,
+            name: toolName,
+            output: toolContent,
           } as any);
         }
 
@@ -132,7 +136,7 @@ export class OpenAIService extends BaseAIService {
             input: conversationInputs,
             tools,
             temperature: 1,
-            max_output_tokens: 500,
+            max_output_tokens: 8096,
           };
 
           // Log a small preview of the continue payload
@@ -222,9 +226,9 @@ export class OpenAIService extends BaseAIService {
       // summarize the most recent tool outputs (these were added as role: 'tool')
       try {
         const recentToolResults = conversationInputs
-          .filter((i: any) => i.role === 'tool')
+          .filter((i: any) => i.type === 'function_call_output')
           .slice(-3)
-          .map((t: any) => (typeof t.content === 'string' ? t.content : JSON.stringify(t.content)));
+          .map((t: any) => (typeof t.output === 'string' ? t.output : JSON.stringify(t.output)));
 
         if (recentToolResults.length > 0) {
           const aggregated = `Tool results:\n${recentToolResults.join('\n---\n')}`;
