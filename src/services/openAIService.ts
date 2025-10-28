@@ -66,7 +66,7 @@ export class OpenAIService extends BaseAIService {
         input: conversationInputs,
         tools: tools,
         temperature: 1,
-        max_output_tokens: 500,
+        max_output_tokens: 1000,
       };
 
       // Log a redacted preview of the payload (avoid logging secrets) but log everything else.
