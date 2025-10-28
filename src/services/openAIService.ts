@@ -140,7 +140,20 @@ export class OpenAIService extends BaseAIService {
           // correlate results with the original function call.
           const callId = fc.call_id || fc.id || '';
           const toolContent = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
-          // Use the Responses API documented shape for tool outputs
+          // Use the Responses API documented shapes for tool calls and outputs.
+          // Append the original function_call (so the model sees the call it made)
+          // and then the corresponding function_call_output with the actual result.
+          // Example function_call shape:
+          // { type: 'function_call', call_id: '<id>', name: '<toolName>', arguments: '{"arg":"value"}' }
+
+          conversationInputs.push({
+            type: 'function_call',
+            call_id: callId,
+            name: toolName,
+            arguments: typeof fc.arguments === 'string' ? fc.arguments : JSON.stringify(fc.arguments || {}),
+          } as any);
+
+          // Then append the function_call_output item with the tool's result
           // See: { type: 'function_call_output', call_id: '<id>', output: '<string>' }
           conversationInputs.push({
             type: 'function_call_output',
