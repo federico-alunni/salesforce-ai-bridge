@@ -44,11 +44,14 @@ export class OpenAIService extends BaseAIService {
       if (recordContext) {
         const contextPrefix = this.formatRecordContext(recordContext);
         enhancedUserMessage = contextPrefix + userMessage;
-        console.log(`📋 [OpenAI] Record context included for ${recordContext.objectApiName} (${recordContext.recordId})`);
-      }
-
-      const conversationInputs = [
-        ...messages.map(m => ({ role: m.role, content: m.content })),
+          // Keep user message unchanged; record context will be placed into
+          // the `instructions` (system prompt) so the model sees it as context
+          // rather than part of the user's message.
+          let enhancedUserMessage = userMessage;
+          let recordContextText = '';
+          if (recordContext) {
+            recordContextText = this.formatRecordContext(recordContext);
+            console.log(`📋 [OpenAI] Record context prepared for ${recordContext.objectApiName} (${recordContext.recordId})`);
         { role: 'user', content: enhancedUserMessage },
       ];
 
@@ -60,22 +63,48 @@ export class OpenAIService extends BaseAIService {
         messageLength: enhancedUserMessage.length,
       });
 
-      const payload: any = {
-        model: this.model,
-        instructions: this.getSystemPrompt(),
-        input: conversationInputs,
-        tools: tools,
-        temperature: 1,
-        max_output_tokens: 8096,
-      };
+        // Build instructions. If Salesforce auth/context is provided, append a
+        // small USER CONTEXT section (do NOT include access tokens).
+        let instructions = this.getSystemPrompt();
+        if (salesforceAuth) {
+          try {
+            const userInfo = salesforceAuth.userInfo || {};
+            const instanceUrl = salesforceAuth.instanceUrl || '';
+            const userId = userInfo.userId || userInfo.user || '';
+            const userEmail = userInfo.email || '';
+            const userName = userInfo.displayName || userInfo.username || '';
+
+            instructions += `\n\n=== USER CONTEXT  ===\n` +
+              `Salesforce Instance URL: ${instanceUrl}\n` +
+              `Salesforce User Id: ${userId}\n` +
+              `Salesforce User Email: ${userEmail}\n` +
+              `Salesforce User Name: ${userName}\n` +
+              `=== END USER CONTEXT ===\n`;
+          } catch (e) {
+            // ignore errors when reading auth info
+          }
+        }
+
+        const payload: any = {
+          model: this.model,
+          instructions,
+          input: conversationInputs,
+          // If we have Salesforce record context, include it in the instructions
+          if (recordContextText) {
+            instructions += `\n\n=== RECORD CONTEXT ===\n${recordContextText}=== END RECORD CONTEXT ===\n`;
+          }
+          tools: tools,
+          temperature: 1,
+          max_output_tokens: 8096,
+        };
 
       // Log a redacted preview of the payload (avoid logging secrets) but log everything else.
-      console.log('📦 [OpenAI] Request payload preview:', JSON.stringify(payload));
+      console.log(`[OpenAI] Initial request payload preview:`, JSON.stringify(payload));
 
       // Send initial request to Responses API
       let response = await this.client.post('/responses', payload);
 
-      console.log('OpenAI initial response:', {
+      console.log(`[OpenAI] Initial response:`, {
         model: response.data.model,
         status: response.data.status,
         outputs: response.data.output,
@@ -97,7 +126,7 @@ export class OpenAIService extends BaseAIService {
           break; // no tool calls requested
         }
 
-        console.log(`Iteration ${iteration}: OpenAI requested ${functionCalls.length} tool calls`);
+        console.log(`[OpenAI] Iteration ${iteration}: OpenAI requested ${functionCalls.length} tool calls`);
 
         // Append tool call placeholders to conversation inputs and execute tools
         for (const fc of functionCalls) {
@@ -109,7 +138,7 @@ export class OpenAIService extends BaseAIService {
             toolArgs = {};
           }
 
-          console.log(`Executing tool ${toolName} with args:`, toolArgs);
+          console.log(`[AI Bridge] Executing tool ${toolName} with args:`, toolArgs);
           const toolResult = await this.executeTool(toolName, toolArgs, salesforceAuth);
 
           // Append tool result as an assistant message. The Responses API input
@@ -123,21 +152,41 @@ export class OpenAIService extends BaseAIService {
           conversationInputs.push({
             type: 'function_call_output',
             call_id: callId,
-            name: toolName,
             output: toolContent,
           } as any);
         }
 
         // Continue the conversation by calling the Responses API with updated inputs
         try {
-          const continuePayload = {
-            model: this.model,
-            instructions: this.getSystemPrompt(),
-            input: conversationInputs,
-            tools,
-            temperature: 1,
-            max_output_tokens: 8096,
-          };
+            // For continuation, also include the same USER CONTEXT when available
+            let continueInstructions = this.getSystemPrompt();
+            if (salesforceAuth) {
+              try {
+                const userInfo = salesforceAuth.userInfo || {};
+                const instanceUrl = salesforceAuth.instanceUrl || '';
+                const userId = userInfo.userId || userInfo.user || '';
+                const userEmail = userInfo.email || '';
+                const userName = userInfo.displayName || userInfo.username || '';
+
+                continueInstructions += `\n\n=== USER CONTEXT (Salesforce headers) ===\n` +
+                  `X-Salesforce-Instance-URL: ${instanceUrl}\n` +
+                  `X-Salesforce-User-Id: ${userId}\n` +
+                  `X-Salesforce-User-Email: ${userEmail}\n` +
+                  `X-Salesforce-User-Name: ${userName}\n` +
+                  `=== END USER CONTEXT ===\n`;
+              } catch (e) {
+                // ignore
+              }
+            }
+
+            const continuePayload = {
+              model: this.model,
+              instructions: continueInstructions,
+              input: conversationInputs,
+              tools,
+              temperature: 1,
+              max_output_tokens: 8096,
+            };
 
           // Log a small preview of the continue payload
           try {
@@ -145,20 +194,20 @@ export class OpenAIService extends BaseAIService {
               model: continuePayload.model,
               input: continuePayload.input.slice(-3),
             };
-            console.log(`📦 [OpenAI] Continue payload preview (iteration ${iteration}):`, JSON.stringify(preview));
+            console.log(`[OpenAI] Iteration ${iteration} Continue payload preview:`, JSON.stringify(preview));
           } catch (e) {
             // ignore logging errors
           }
 
           response = await this.client.post('/responses', continuePayload);
 
-          console.log(`Iteration ${iteration} response:`, {
+          console.log(`[OpenAI] Iteration ${iteration} response:`, {
             status: response.data.status,
             outputs: response.data.output,
             parallel_tool_calls: response.data.parallel_tool_calls,
           });
         } catch (err) {
-          console.error(`Error while continuing conversation at iteration ${iteration}:`, err);
+          console.error(`[OpenAI] Error while continuing conversation at iteration ${iteration}:`, err);
           throw err;
         }
       }
@@ -211,14 +260,14 @@ export class OpenAIService extends BaseAIService {
       for (const outItem of finalOutputs) {
         const txt = extractFromOutputItem(outItem);
         if (txt) {
-          console.log('📥 [OpenAI] Extracted final text from output item:', txt.substring(0, 300));
+          console.log('[OpenAI] Extracted final text from output item:', txt.substring(0, 300));
           return txt;
         }
       }
 
       // If there's a top-level text field, use it
       if (response.data.text && typeof response.data.text === 'string') {
-        console.log('📥 [OpenAI] Extracted top-level text from response.data.text');
+        console.log('[OpenAI] Extracted top-level text from response.data.text');
         return response.data.text;
       }
 
@@ -232,7 +281,7 @@ export class OpenAIService extends BaseAIService {
 
         if (recentToolResults.length > 0) {
           const aggregated = `Tool results:\n${recentToolResults.join('\n---\n')}`;
-          console.log('📥 [OpenAI] No direct text in response; returning aggregated tool results');
+          console.log(`[OpenAI] No direct text in response; returning aggregated tool results`);
           return aggregated;
         }
       } catch (e) {
@@ -240,14 +289,14 @@ export class OpenAIService extends BaseAIService {
       }
 
       // As last resort, return a serialized form of the outputs for debugging
-      console.warn('⚠️ [OpenAI] No textual output found in response; returning serialized outputs for debugging');
+      console.warn('[OpenAI] No textual output found in response; returning serialized outputs for debugging');
       try {
         return JSON.stringify(finalOutputs) || 'I processed your request but had no response to provide.';
       } catch (e) {
         return 'I processed your request but had no response to provide.';
       }
     } catch (error: any) {
-      console.error('Error in OpenAI chat:', error.response?.data || error.message);
+      console.error('[OpenAI] Error in OpenAI chat:', error.response?.data || error.message);
 
       if (error.response?.status === 401) {
         throw new Error('Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable.');
