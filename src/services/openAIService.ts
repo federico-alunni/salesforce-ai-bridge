@@ -112,12 +112,15 @@ export class OpenAIService extends BaseAIService {
           console.log(`Executing tool ${toolName} with args:`, toolArgs);
           const toolResult = await this.executeTool(toolName, toolArgs, salesforceAuth);
 
-          // Append tool result as a tool-role input so the model can continue
+          // Append tool result as an assistant message. The Responses API input
+          // does not support a 'tool' role; instead include the tool output as
+          // an assistant-style message with a clear prefix so the model can
+          // correlate results with the original function call.
+          const callId = fc.call_id || fc.id || '';
+          const toolContent = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
           conversationInputs.push({
-            role: 'tool',
-            name: toolName,
-            content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
-            call_id: fc.call_id || fc.id || undefined,
+            role: 'assistant',
+            content: `[[TOOL_RESULT name=${toolName} id=${callId}]]\n${toolContent}`,
           } as any);
         }
 
