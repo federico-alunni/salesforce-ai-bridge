@@ -78,7 +78,7 @@ export class OpenAIService extends BaseAIService {
       console.log('OpenAI initial response:', {
         model: response.data.model,
         status: response.data.status,
-        outputs: Array.isArray(response.data.output) ? response.data.output.length : undefined,
+        outputs: response.data.output,
         parallel_tool_calls: response.data.parallel_tool_calls,
       });
 
@@ -97,7 +97,7 @@ export class OpenAIService extends BaseAIService {
           break; // no tool calls requested
         }
 
-  console.log(`Iteration ${iteration}: OpenAI requested ${functionCalls.length} tool calls`);
+        console.log(`Iteration ${iteration}: OpenAI requested ${functionCalls.length} tool calls`);
 
         // Append tool call placeholders to conversation inputs and execute tools
         for (const fc of functionCalls) {
@@ -147,7 +147,7 @@ export class OpenAIService extends BaseAIService {
 
           console.log(`Iteration ${iteration} response:`, {
             status: response.data.status,
-            outputs: Array.isArray(response.data.output) ? response.data.output.length : undefined,
+            outputs: response.data.output,
             parallel_tool_calls: response.data.parallel_tool_calls,
           });
         } catch (err) {
