@@ -21,15 +21,6 @@ interface MCPToolResponse {
   isError?: boolean;
 }
 
-interface MCPRequestMeta {
-  salesforceAuth?: {
-    accessToken: string;
-    instanceUrl: string;
-    userId: string;
-    username: string;
-  };
-}
-
 export class MCPClientService {
   private httpClient: AxiosInstance;
   private connected: boolean = false;
@@ -198,31 +189,34 @@ export class MCPClientService {
     try {
       console.log(`Calling MCP tool: ${name}`, JSON.stringify(args, null, 2));
       
-      // Inject Salesforce auth into arguments if provided
-      const toolArguments = { ...args };
-      if (salesforceAuth) {
-        toolArguments._salesforceAuth = {
-          accessToken: salesforceAuth.accessToken,
-          instanceUrl: salesforceAuth.instanceUrl,
-          username: salesforceAuth.userInfo.username,
-        };
-        console.log(
-          `Including Salesforce auth for user: ${salesforceAuth.userInfo.username} (${salesforceAuth.userInfo.userId})`
-        );
-      }
-      
-      // Build the request
+      // Build the request body without Salesforce auth
       const requestBody: any = {
         jsonrpc: '2.0',
         id: Date.now(),
         method: 'tools/call',
         params: {
           name,
-          arguments: toolArguments,
+          arguments: args,
         },
       };
       
-      const response = await this.httpClient.post(`?sessionId=${this.sessionId}`, requestBody);
+      // Build custom headers for Salesforce auth if provided
+      const headers: Record<string, string> = {};
+      if (salesforceAuth) {
+        headers['x-salesforce-access-token'] = salesforceAuth.accessToken;
+        headers['x-salesforce-instance-url'] = salesforceAuth.instanceUrl;
+        headers['x-salesforce-username'] = salesforceAuth.userInfo.username;
+        headers['x-salesforce-user-id'] = salesforceAuth.userInfo.userId;
+        console.log(
+          `Including Salesforce auth headers for user: ${salesforceAuth.userInfo.username} (${salesforceAuth.userInfo.userId})`
+        );
+      }
+      
+      const response = await this.httpClient.post(
+        `?sessionId=${this.sessionId}`, 
+        requestBody,
+        { headers }
+      );
 
       // Parse SSE response
       const data = this.parseSSEResponse(response.data);
