@@ -15,6 +15,8 @@ declare global {
   }
 }
 
+// Test comment for reviewer
+
 export function createChatRouter(
   sessionManager: SessionManager,
   aiService: IAIService,
